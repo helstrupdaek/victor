@@ -73,6 +73,20 @@ export function useVideoScrub(
     return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata)
   }, [videoRef])
 
+  // Some mobile browsers reclaim a video's decoded buffer once it scrolls
+  // far enough off-screen to save memory, silently resetting readyState
+  // back to 0 — without this, Victor stays blank the next time the hero
+  // scrolls back into view since nothing else re-triggers a fetch. The
+  // existing loadedmetadata listener above (still attached — the element
+  // itself never unmounts) picks the reload back up once it completes.
+  useEffect(() => {
+    if (!enabled) return
+    const video = videoRef.current
+    if (!video || video.readyState >= 1) return
+    metadataReadyRef.current = false
+    video.load()
+  }, [videoRef, enabled])
+
   // Some mobile browsers (notably iOS Safari) ignore `preload="auto"` and
   // never fetch any video data until the visitor makes a gesture, as a
   // data-saving measure — regardless of muted/playsInline. This nudges
