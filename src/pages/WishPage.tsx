@@ -145,6 +145,12 @@ function AddWishForm({ onAdded }: { onAdded: () => void }) {
     }
   }
 
+  function handleManualAdd() {
+    setUrl('')
+    setError(null)
+    setPreview({ ok: false, reason: 'manual' })
+  }
+
   async function handleSave() {
     if (!title.trim()) {
       setError('Skriv en titel.')
@@ -177,22 +183,31 @@ function AddWishForm({ onAdded }: { onAdded: () => void }) {
       <h2 className="font-display text-lg text-ink-900">Tilføj et ønske</h2>
 
       {!preview && (
-        <form onSubmit={handleFetchPreview} className="flex gap-2">
-          <Input
-            placeholder="Indsæt link til produktet"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isFetching}>
-            {isFetching ? 'Henter...' : 'Hent'}
-          </Button>
-        </form>
+        <div className="space-y-2">
+          <form onSubmit={handleFetchPreview} className="flex gap-2">
+            <Input
+              placeholder="Indsæt link til produktet"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={isFetching}>
+              {isFetching ? 'Henter...' : 'Hent'}
+            </Button>
+          </form>
+          <button
+            type="button"
+            onClick={handleManualAdd}
+            className="text-sm text-ink-600 underline underline-offset-4 hover:text-ink-900"
+          >
+            Har du ikke et link? Tilføj selv (fx "Penge" eller "En oplevelse")
+          </button>
+        </div>
       )}
 
       {preview && (
         <div className="space-y-3 rounded-xl border border-ink-900/10 bg-cream-100 p-4">
-          {preview.ok === false && (
+          {preview.ok === false && preview.reason !== 'manual' && (
             <p className="text-sm text-ink-600">
               Kunne ikke hente billede/titel automatisk — udfyld det selv herunder.
             </p>
