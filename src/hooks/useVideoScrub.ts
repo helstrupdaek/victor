@@ -73,6 +73,29 @@ export function useVideoScrub(
     return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata)
   }, [videoRef])
 
+  // Some mobile browsers (notably iOS Safari) ignore `preload="auto"` and
+  // never fetch any video data until the visitor makes a gesture, as a
+  // data-saving measure — regardless of muted/playsInline. This nudges
+  // loading to start the moment the visitor touches/clicks anywhere, so
+  // Victor appears as soon as realistically possible on those browsers
+  // (the poster image covers the moment before that).
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    function kickstartLoad() {
+      if (!video || metadataReadyRef.current) return
+      video.load()
+    }
+
+    window.addEventListener('touchstart', kickstartLoad, { once: true, passive: true })
+    window.addEventListener('pointerdown', kickstartLoad, { once: true })
+    return () => {
+      window.removeEventListener('touchstart', kickstartLoad)
+      window.removeEventListener('pointerdown', kickstartLoad)
+    }
+  }, [videoRef])
+
   useEffect(() => {
     if (!enabled || reducedMotion || useIdleDrift) return
     const video = videoRef.current
