@@ -1,5 +1,5 @@
 import { Gift, SquareArrowOutUpRight, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { Input, Label } from '@/components/FormControls'
