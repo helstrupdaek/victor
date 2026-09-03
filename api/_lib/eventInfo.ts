@@ -1,6 +1,6 @@
-import { DEFAULT_EVENT_INFO } from '@/data/eventInfo'
+import { DEFAULT_EVENT_INFO } from '../../src/data/eventInfo.js'
 import type { EventInfo } from '@/types'
-import { getSupabaseAdmin } from './supabaseAdmin'
+import { getSupabaseAdmin } from './supabaseAdmin.js'
 
 /** Server-side equivalent of the client's `useSiteSetting('event_info', ...)`. */
 export async function getEventInfo(): Promise<EventInfo> {

@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Guest } from '@/types'
-import { getEventInfo } from './_lib/eventInfo'
-import { readJsonBody, sendJson } from './_lib/http'
-import { buildConfirmationIcs, ICS_FILENAME } from './_lib/ics'
-import { buildConfirmationEmail } from './_lib/emailTemplate'
-import { sendEmail } from './_lib/resend'
-import { getSupabaseAdmin } from './_lib/supabaseAdmin'
+import { getEventInfo } from './_lib/eventInfo.js'
+import { readJsonBody, sendJson } from './_lib/http.js'
+import { buildConfirmationIcs, ICS_FILENAME } from './_lib/ics.js'
+import { buildConfirmationEmail } from './_lib/emailTemplate.js'
+import { sendEmail } from './_lib/resend.js'
+import { getSupabaseAdmin } from './_lib/supabaseAdmin.js'
 
 function getBaseUrl(req: IncomingMessage): string {
   const host = req.headers.host ?? 'localhost:5173'

@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Guest } from '@/types'
-import { getEventInfo } from './_lib/eventInfo'
-import { getQueryParam, sendJson } from './_lib/http'
-import { buildConfirmationIcs, ICS_FILENAME } from './_lib/ics'
-import { getSupabaseAdmin } from './_lib/supabaseAdmin'
+import { getEventInfo } from './_lib/eventInfo.js'
+import { getQueryParam, sendJson } from './_lib/http.js'
+import { buildConfirmationIcs, ICS_FILENAME } from './_lib/ics.js'
+import { getSupabaseAdmin } from './_lib/supabaseAdmin.js'
 
 /**
  * GET /api/calendar-invite?email=... — regenerates the same .ics on demand
