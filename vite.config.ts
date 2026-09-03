@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin, type ViteDevServer } from 'vite'
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from 'vite'
 
 /**
  * Runs the `/api/*` Vercel serverless functions locally under `npm run dev`
@@ -58,11 +58,23 @@ function localApiRoutes(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss(), localApiRoutes()],
-  resolve: {
-    alias: {
-      '@': path.resolve(import.meta.dirname, './src'),
+export default defineConfig(({ mode }) => {
+  // Vite only forwards VITE_-prefixed vars to import.meta.env for the
+  // client bundle; the /api routes above run as plain server-side Node
+  // code (via ssrLoadModule) and read process.env directly, exactly like
+  // they do on Vercel — so .env's non-VITE_ keys (service-role key, Resend
+  // key, etc.) need to be copied in here for local dev to match production.
+  const env = loadEnv(mode, process.cwd(), '')
+  for (const [key, value] of Object.entries(env)) {
+    process.env[key] ??= value
+  }
+
+  return {
+    plugins: [react(), tailwindcss(), localApiRoutes()],
+    resolve: {
+      alias: {
+        '@': path.resolve(import.meta.dirname, './src'),
+      },
     },
-  },
+  }
 })
