@@ -12,9 +12,16 @@ export async function submitRsvp(submission: GuestSubmission): Promise<void> {
   }
 
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase
-      .from('guests')
-      .upsert(normalized, { onConflict: 'email' })
+    const { error } = await supabase.rpc('submit_rsvp', {
+      p_name: normalized.name,
+      p_email: normalized.email,
+      p_attending: normalized.attending,
+      p_adults_count: normalized.adults_count,
+      p_children_count: normalized.children_count,
+      p_attendee_names: normalized.attendee_names,
+      p_allergies: normalized.allergies,
+      p_comment: normalized.comment,
+    })
     if (error) throw error
     return
   }
