@@ -1,5 +1,5 @@
 import { Gift, SquareArrowOutUpRight, Trash2 } from 'lucide-react'
-import { type FormEvent, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { Input, Label } from '@/components/FormControls'
@@ -12,49 +12,107 @@ import {
   verifyWishPin,
   type WishPreview,
 } from '@/lib/api/wish'
+import { cn } from '@/lib/utils'
 import type { WishlistItem } from '@/types'
 
+const PIN_LENGTH = 4
+
 function PinGate({ onVerified }: { onVerified: () => void }) {
-  const [pin, setPin] = useState('')
+  const [digits, setDigits] = useState<string[]>(Array(PIN_LENGTH).fill(''))
   const [error, setError] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([])
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+  useEffect(() => {
+    inputRefs.current[0]?.focus()
+  }, [])
+
+  async function submit(pin: string) {
     setIsChecking(true)
     setError(null)
     try {
-      const ok = await verifyWishPin(pin.trim())
-      if (ok) onVerified()
-      else setError('Forkert pinkode.')
+      const ok = await verifyWishPin(pin)
+      if (ok) {
+        onVerified()
+        return
+      }
+      setError('Forkert pinkode.')
+      setDigits(Array(PIN_LENGTH).fill(''))
+      inputRefs.current[0]?.focus()
     } finally {
       setIsChecking(false)
     }
   }
 
+  function handleChange(index: number, rawValue: string) {
+    const value = rawValue.replace(/\D/g, '').slice(-1)
+    const next = [...digits]
+    next[index] = value
+    setDigits(next)
+    setError(null)
+
+    if (value && index < PIN_LENGTH - 1) {
+      inputRefs.current[index + 1]?.focus()
+    }
+    if (value && next.every((d) => d)) {
+      void submit(next.join(''))
+    }
+  }
+
+  function handleKeyDown(index: number, event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Backspace' && !digits[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus()
+    }
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, PIN_LENGTH)
+    if (!pasted) return
+    event.preventDefault()
+    const next = Array(PIN_LENGTH).fill('')
+    for (let i = 0; i < pasted.length; i++) next[i] = pasted[i]
+    setDigits(next)
+    if (pasted.length === PIN_LENGTH) void submit(pasted)
+    else inputRefs.current[pasted.length]?.focus()
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-cream-100 px-6">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-xs space-y-4 rounded-2xl border border-ink-900/10 bg-cream-50 p-8 text-center shadow-card"
-      >
-        <h1 className="font-display text-xl text-ink-900">Din ønskeliste</h1>
-        <div className="text-left">
-          <Label htmlFor="pin">Pinkode</Label>
-          <Input
-            id="pin"
-            type="password"
-            inputMode="numeric"
-            autoFocus
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-          />
+      <div className="w-full max-w-xs space-y-6 text-center">
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl text-ink-900">Indtast pinkode</h1>
+          <p className="text-sm text-ink-600">
+            Skriv din pinkode for at komme ind på din ønskeliste.
+          </p>
         </div>
+
+        <div className="flex justify-center gap-3">
+          {digits.map((digit, index) => (
+            <input
+              key={index}
+              ref={(el) => {
+                inputRefs.current[index] = el
+              }}
+              type="password"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              disabled={isChecking}
+              onChange={(e) => handleChange(index, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(index, e)}
+              onPaste={handlePaste}
+              className={cn(
+                'h-16 w-14 rounded-xl border text-center text-2xl font-medium text-ink-900',
+                'bg-cream-50 transition-colors focus:outline-none focus-visible:ring-2',
+                'focus-visible:ring-green-600/30',
+                error ? 'border-red-400' : 'border-ink-900/15 focus:border-green-600',
+              )}
+            />
+          ))}
+        </div>
+
         {error && <p className="text-sm text-red-700">{error}</p>}
-        <Button type="submit" disabled={isChecking} className="w-full">
-          {isChecking ? 'Tjekker...' : 'Fortsæt'}
-        </Button>
-      </form>
+      </div>
     </div>
   )
 }
