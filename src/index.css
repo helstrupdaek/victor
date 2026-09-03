@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Fraunces', 'Iowan Old Style', ui-serif, Georgia, serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Warm off-white ground, inspired by linen / clubhouse paper */
+  --color-cream-50: #fdfcf9;
+  --color-cream-100: #f8f5ee;
+  --color-cream-200: #f1ecdf;
+  --color-cream-300: #e6ddc6;
+
+  /* Dark charcoal ink, never pure black */
+  --color-ink-900: #211f1a;
+  --color-ink-800: #322f28;
+  --color-ink-600: #55503f;
+  --color-ink-400: #86806c;
+
+  /* Putting-green scale */
+  --color-green-50: #eef2e7;
+  --color-green-100: #dfe8d2;
+  --color-green-300: #b3c69f;
+  --color-green-500: #7c9473;
+  --color-green-600: #64795a;
+  --color-green-700: #4b6244;
+  --color-green-900: #2c3b26;
+
+  /* Muted fairway gold, used sparingly for accent */
+  --color-gold-400: #cdaf76;
+  --color-gold-600: #a9884f;
+
+  --shadow-soft: 0 20px 60px -25px rgb(33 31 26 / 0.35);
+  --shadow-card: 0 12px 30px -18px rgb(33 31 26 / 0.25);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-cream-100);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-green-700);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glass-panel {
+    background: rgb(253 252 249 / 0.55);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgb(255 255 255 / 0.4);
+  }
+}
