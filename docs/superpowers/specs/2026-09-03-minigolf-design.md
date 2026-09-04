@@ -27,17 +27,38 @@ announced at the party.
 
 ## Gameplay
 
-- **Course**: inspired by the house photo without trying to be accurate — tee
-  near the road/driveway, a bend around a blocky stand-in for the house, cup
-  somewhere in the garden, one simple obstacle (e.g. a cylinder "tree") to
-  bank around.
+- **Course** *(revised after seeing real reference photos of the actual
+  garden — supersedes the original generic "house + one tree" layout)*:
+  modeled on the real shape of the party garden, still simple/stylized
+  blocky geometry, not photorealistic. Tee starts on the grass by the
+  carport (near where the car sits). The path runs along the lawn strip
+  beside the driveway/hedge, opens into the main lawn (a long, hedge-ringed
+  open area with the house along one edge), passes a round clipped bush
+  (an obstacle to bank around — modeled as a sphere rather than the
+  original thin cylinder "tree", since the real feature is a round shrub),
+  and finishes at a cup in the corner near the apple tree. Still **one
+  hole** — this is a longer, more scenic single path through the real
+  garden's layout, not multiple holes.
 - **Boundaries**: invisible walls around the entire play area so an errant
-  shot bounces back rather than needing out-of-bounds handling.
+  shot bounces back rather than needing out-of-bounds handling. Also a
+  Y-position watchdog (reset the ball to the tee if it ever ends up below
+  the floor) and continuous collision detection on the ball, as defense in
+  depth against fast shots tunneling through thin colliders — discovered
+  as a real, reproducible bug during implementation playtesting.
 - **Controls**: click-and-drag from the ball — drag direction sets aim
   (opposite the drag), drag distance sets power, release to shoot. Identical
   behavior for mouse and touch.
-- **Camera**: fixed, angled overhead view showing the whole hole at once. No
-  camera-follow logic.
+- **Aim indicator** *(added after implementation playtesting showed the
+  fixed camera made aiming genuinely hard to verify/play)*: a 3D arrow
+  anchored at the ball, visible while dragging, pointing in the current aim
+  direction. Its color interpolates green → yellow → red as drag distance
+  approaches `MAX_DRAG_DISTANCE`, giving the player direct visual feedback
+  on shot power before releasing.
+- **Camera**: *(revised from the original fixed-angle-only design)*
+  player-controllable orbit (drag to rotate around the course, scroll/pinch
+  to zoom), via `@react-three/drei`'s `OrbitControls`, so the player can
+  reposition their view to line up a shot — rather than a single fixed
+  angle. Starts at a reasonable default angle showing the whole course.
 - **Timing**: stopwatch starts on the first shot (not on page load) and stops
   the instant the ball sinks. Shot count increments per swing.
 
