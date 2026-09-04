@@ -124,3 +124,13 @@ export interface EventInfo {
 export interface ReservedGiftsSummary {
   titles: string[]
 }
+
+export interface MinigolfScore {
+  id: string
+  created_at: string
+  updated_at: string
+  guest_email: string
+  shots: number
+  seconds: number
+  score: number
+}
