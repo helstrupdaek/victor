@@ -59,14 +59,26 @@ announced at the party.
   and colored (dark wood tones) so it reads as "the terrace" to anyone
   who's been there. A dashed circular ring around the ball indicates aim
   range while idle/dragging, in addition to the directional aim arrow. A
-  simple distance-to-hole readout is shown in the HUD. Elements from the
-  reference screenshot that don't map to this game's design are
-  deliberately NOT copied: no par/currency/health-bar HUD widgets, no
-  keyboard controls (drag-only, per the original spec) — that screenshot
-  is a style/texture reference for the fairway/walls/aim-ring, not a
+  simple distance-to-hole readout is shown in the HUD.
+- **More real-yard obstacles** *(user's own follow-up, referring back to
+  the same reference photos already used for the course layout)*: beyond
+  the round bush and decorative apple tree already speced, add a few more
+  recognizable real-yard items as obstacles scattered through the course —
+  the robot lawnmower (small dark box), one or two flower/planter baskets
+  (the corten-steel planter boxes and the wicker basket seen in the
+  photos), and additional trimmed bushes/hedge-corner shapes. Keep these
+  simple stylized geometry like everything else — the goal is "oh, that's
+  our robot mower" recognition, not detailed modeling. Don't let them
+  crowd the fairway or make the hole meaningfully harder to reach; they're
+  flavor/scenery-as-obstacle in the spirit of minigolf, not a difficulty
+  escalation.
+- **What NOT to copy from the reference screenshot**: no par/currency/
+  health-bar HUD widgets, no keyboard controls (drag-only, per the
+  original spec) — that screenshot is a style/texture reference for the
+  fairway checkering, wall visibility, and aim-ring UI only, not a
   feature checklist, and the actual garden's own features (hedge,
-  terrace, pavilion) take priority over the reference's generic look
-  wherever the two would conflict.
+  terrace, pavilion, robot mower, planters) take priority over the
+  reference's generic tropical look wherever the two would conflict.
 - **Controls**: click-and-drag from the ball — drag direction sets aim
   (opposite the drag), drag distance sets power, release to shoot. Identical
   behavior for mouse and touch.
