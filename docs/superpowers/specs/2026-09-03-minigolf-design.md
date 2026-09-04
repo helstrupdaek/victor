@@ -49,15 +49,24 @@ announced at the party.
   a polished mobile minigolf game — supersedes the earlier "flat green
   ground, invisible walls" look)*: the fairway uses a two-tone checkered
   texture (alternating light/dark green squares, like mown-lawn stripes)
-  rather than a flat color. Boundary walls are **visible** (stone/brick-
-  styled, not just invisible colliders) so the player can see the play
-  area's edges. A dashed circular ring around the ball indicates aim
+  rather than a flat color. Boundary walls are **visible**, but styled as
+  the real garden's tall trimmed **hedge** (dark green, textured) — NOT
+  the reference screenshot's generic stone/brick, since the whole point of
+  this course is that guests recognize it as the actual party garden.
+  Along one edge, add a recognizable stand-in for the real **terrace/deck
+  and pavilion** (the wooden pergola with the outdoor kitchen/dining
+  area) as scenery — simple stylized boxes, not detailed, but positioned
+  and colored (dark wood tones) so it reads as "the terrace" to anyone
+  who's been there. A dashed circular ring around the ball indicates aim
   range while idle/dragging, in addition to the directional aim arrow. A
   simple distance-to-hole readout is shown in the HUD. Elements from the
-  reference that don't map to this game's design are deliberately NOT
-  copied: no par/currency/health-bar HUD widgets, no keyboard controls
-  (drag-only, per the original spec) — this is a style/texture reference,
-  not a feature checklist.
+  reference screenshot that don't map to this game's design are
+  deliberately NOT copied: no par/currency/health-bar HUD widgets, no
+  keyboard controls (drag-only, per the original spec) — that screenshot
+  is a style/texture reference for the fairway/walls/aim-ring, not a
+  feature checklist, and the actual garden's own features (hedge,
+  terrace, pavilion) take priority over the reference's generic look
+  wherever the two would conflict.
 - **Controls**: click-and-drag from the ball — drag direction sets aim
   (opposite the drag), drag distance sets power, release to shoot. Identical
   behavior for mouse and touch.
