@@ -39,12 +39,25 @@ announced at the party.
   and finishes at a cup in the corner near the apple tree. Still **one
   hole** — this is a longer, more scenic single path through the real
   garden's layout, not multiple holes.
-- **Boundaries**: invisible walls around the entire play area so an errant
-  shot bounces back rather than needing out-of-bounds handling. Also a
+- **Boundaries**: walls around the entire play area so an errant shot
+  bounces back rather than needing out-of-bounds handling. Also a
   Y-position watchdog (reset the ball to the tee if it ever ends up below
   the floor) and continuous collision detection on the ball, as defense in
   depth against fast shots tunneling through thin colliders — discovered
   as a real, reproducible bug during implementation playtesting.
+- **Visual style** *(added after the user shared a reference screenshot of
+  a polished mobile minigolf game — supersedes the earlier "flat green
+  ground, invisible walls" look)*: the fairway uses a two-tone checkered
+  texture (alternating light/dark green squares, like mown-lawn stripes)
+  rather than a flat color. Boundary walls are **visible** (stone/brick-
+  styled, not just invisible colliders) so the player can see the play
+  area's edges. A dashed circular ring around the ball indicates aim
+  range while idle/dragging, in addition to the directional aim arrow. A
+  simple distance-to-hole readout is shown in the HUD. Elements from the
+  reference that don't map to this game's design are deliberately NOT
+  copied: no par/currency/health-bar HUD widgets, no keyboard controls
+  (drag-only, per the original spec) — this is a style/texture reference,
+  not a feature checklist.
 - **Controls**: click-and-drag from the ball — drag direction sets aim
   (opposite the drag), drag distance sets power, release to shoot. Identical
   behavior for mouse and touch.
