@@ -1,13 +1,26 @@
-import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
+import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier'
 
+// Course modeled loosely on the real party garden: tee on the grass strip
+// by the carport, a long open lawn bordered by the house along one edge,
+// a round clipped bush to bank shots around partway along, and the cup in
+// the far corner near a (purely decorative) apple tree.
 const COURSE_WIDTH = 10
-const COURSE_LENGTH = 16
-const WALL_HEIGHT = 1
+const COURSE_LENGTH = 22
+const WALL_HEIGHT = 2
 
-export const TEE_POSITION: [number, number, number] = [0, 0.2, -6]
-const HOLE_POSITION: [number, number, number] = [3, 0.05, 6]
-const HOUSE_POSITION: [number, number, number] = [-1, 0.5, 0]
-const TREE_POSITION: [number, number, number] = [2, 0.5, 2]
+export const TEE_POSITION: [number, number, number] = [-3, 0.2, -10]
+const HOLE_POSITION: [number, number, number] = [3, 0.05, 10]
+// House stand-in runs along one long edge of the lawn, rather than sitting
+// centrally in the middle of the play area.
+const HOUSE_POSITION: [number, number, number] = [-4.25, 0.75, 1]
+const HOUSE_SIZE: [number, number, number] = [1.5, 1.5, 14]
+// Round clipped bush — a real dome-shaped shrub, modeled as a sphere
+// rather than the previous thin cylinder "tree" trunk.
+const BUSH_POSITION: [number, number, number] = [1, 0.6, 0]
+const BUSH_RADIUS = 0.6
+// Decorative apple tree near the hole — purely visual, no collider, so it
+// doesn't make the final putt unfairly harder.
+const APPLE_TREE_POSITION: [number, number, number] = [4.2, 0.6, 8.7]
 
 export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
   return (
@@ -22,28 +35,40 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
 
       {/* Boundary walls (invisible-ish, low-opacity so players can still see the edge) */}
       <RigidBody type="fixed" colliders={false} restitution={0.4}>
-        <CuboidCollider args={[0.1, WALL_HEIGHT, COURSE_LENGTH / 2]} position={[-COURSE_WIDTH / 2, WALL_HEIGHT / 2, 0]} />
-        <CuboidCollider args={[0.1, WALL_HEIGHT, COURSE_LENGTH / 2]} position={[COURSE_WIDTH / 2, WALL_HEIGHT / 2, 0]} />
-        <CuboidCollider args={[COURSE_WIDTH / 2, WALL_HEIGHT, 0.1]} position={[0, WALL_HEIGHT / 2, -COURSE_LENGTH / 2]} />
-        <CuboidCollider args={[COURSE_WIDTH / 2, WALL_HEIGHT, 0.1]} position={[0, WALL_HEIGHT / 2, COURSE_LENGTH / 2]} />
+        <CuboidCollider args={[0.4, WALL_HEIGHT, COURSE_LENGTH / 2]} position={[-COURSE_WIDTH / 2, WALL_HEIGHT / 2, 0]} />
+        <CuboidCollider args={[0.4, WALL_HEIGHT, COURSE_LENGTH / 2]} position={[COURSE_WIDTH / 2, WALL_HEIGHT / 2, 0]} />
+        <CuboidCollider args={[COURSE_WIDTH / 2, WALL_HEIGHT, 0.4]} position={[0, WALL_HEIGHT / 2, -COURSE_LENGTH / 2]} />
+        <CuboidCollider args={[COURSE_WIDTH / 2, WALL_HEIGHT, 0.4]} position={[0, WALL_HEIGHT / 2, COURSE_LENGTH / 2]} />
       </RigidBody>
 
-      {/* House stand-in — a plain block to bank shots around */}
+      {/* House — runs along one long edge of the lawn */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={HOUSE_POSITION} castShadow>
-          <boxGeometry args={[2.5, 1, 3]} />
+          <boxGeometry args={HOUSE_SIZE} />
           <meshStandardMaterial color="#8a7f6a" />
         </mesh>
       </RigidBody>
 
-      {/* Tree obstacle */}
+      {/* Round clipped bush — a dome-shaped shrub to bank shots around */}
       <RigidBody type="fixed" colliders={false} restitution={0.5}>
-        <CylinderCollider args={[0.5, 0.3]} position={TREE_POSITION} />
-        <mesh position={TREE_POSITION} castShadow>
-          <cylinderGeometry args={[0.3, 0.3, 1, 12]} />
-          <meshStandardMaterial color="#5b3a29" />
+        <BallCollider args={[BUSH_RADIUS]} position={BUSH_POSITION} />
+        <mesh position={BUSH_POSITION} castShadow>
+          <sphereGeometry args={[BUSH_RADIUS, 20, 16]} />
+          <meshStandardMaterial color="#3f6b34" />
         </mesh>
       </RigidBody>
+
+      {/* Apple tree near the hole — decorative only, no collider */}
+      <group position={APPLE_TREE_POSITION}>
+        <mesh castShadow position={[0, 0, 0]}>
+          <cylinderGeometry args={[0.08, 0.1, 1.2, 8]} />
+          <meshStandardMaterial color="#5b3a29" />
+        </mesh>
+        <mesh castShadow position={[0, 0.85, 0]}>
+          <sphereGeometry args={[0.55, 16, 12]} />
+          <meshStandardMaterial color="#4f7a3a" />
+        </mesh>
+      </group>
 
       {/* Hole (visual cup) + sensor that detects the ball */}
       <mesh position={[HOLE_POSITION[0], 0.01, HOLE_POSITION[2]]} rotation={[-Math.PI / 2, 0, 0]}>
