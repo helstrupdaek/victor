@@ -88,6 +88,33 @@ announced at the party.
   "simple stylized geometry," and stays out of scope for this feature.
   The reference is for layout/element ideas, not a rendering-fidelity
   target.
+- **Art direction, final round** *(user clarified their concept-art reference
+  is not a photorealism target but a specific, well-defined stylized 3D-game
+  look, after an earlier draft of this spec incorrectly scoped "photorealism"
+  out in favor of plain flat-shaded geometry)*: **Stylized low-poly 3D casual
+  game environment** — bright saturated colors, simplified/rounded geometry,
+  clean PBR materials that still react convincingly to light, soft ambient
+  occlusion and soft directional sunlight, rounded/slightly exaggerated
+  proportions, an elevated isometric-ish default camera angle, "polished
+  mobile minigolf/tycoon game" aesthetic, playful but still architecturally
+  recognizable as the real garden — explicitly **no photorealism** (no real
+  textures/photo materials, no downloaded image assets). Concretely, this
+  means: rounded-corner geometry (e.g. drei's `RoundedBox`) in place of sharp
+  boxes wherever practical (walls, terrace, planters, curb, mower); soft
+  ambient/fill lighting plus a soft-shadowed sun light (no external HDR/CDN
+  environment maps — keep the existing no-downloaded-assets constraint from
+  the checkered-fairway texture, and rely on hemisphere + directional light
+  plus soft contact shadows for the "ambient occlusion" feel instead); more
+  saturated material colors with tuned roughness for a "clean PBR" look
+  rather than flat matte colors; a refined default camera angle read as
+  isometric/elevated while keeping the existing player-controllable orbit.
+  This is a materials/geometry/lighting/camera-default pass only — it must
+  not change collider shapes/sizes, physics tuning, or any gameplay logic.
+- **Signage bugfix**: independent review of the previous visual-polish pass
+  found the START/HOLE text signage renders mirrored/backwards even from the
+  untouched default camera (`rotation={[-Math.PI/2,0,0]}` on both `<Text>`
+  elements in `Course.tsx`) — fix the rotation and re-verify against the
+  actual default camera, not just the transform on paper.
 - **What NOT to copy from the reference screenshot**: no par/currency/
   health-bar HUD widgets, no keyboard controls (drag-only, per the
   original spec) — that screenshot is a style/texture reference for the
