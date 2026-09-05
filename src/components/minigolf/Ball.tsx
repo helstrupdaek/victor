@@ -1,7 +1,17 @@
 import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useRef, useState } from 'react'
-import { Color, type Group, type Mesh, type MeshStandardMaterial, type Camera, Vector2, Vector3 } from 'three'
+import { useMemo, useRef, useState } from 'react'
+import {
+  BufferGeometry,
+  Color,
+  Float32BufferAttribute,
+  type Group,
+  type Mesh,
+  type MeshStandardMaterial,
+  type Camera,
+  Vector2,
+  Vector3,
+} from 'three'
 
 const BALL_RADIUS = 0.15
 const MAX_DRAG_DISTANCE = 3
@@ -56,16 +66,23 @@ function powerColor(t: number, target: Color) {
 
 const UP = new Vector3(0, 1, 0)
 
+// Radius of the dashed aim-range ring shown around the ball at all times —
+// a rough visual indicator of shot range, not tied to the exact impulse
+// math (which depends on drag distance, not a fixed world-space radius).
+const AIM_RING_RADIUS = 1.3
+
 export function Ball({
   teePosition,
   onShotTaken,
   onDragStart,
   onDragEnd,
+  onPositionChange,
 }: {
   teePosition: [number, number, number]
   onShotTaken: () => void
   onDragStart?: () => void
   onDragEnd?: () => void
+  onPositionChange?: (x: number, z: number) => void
 }) {
     const bodyRef = useRef<RapierRigidBody>(null)
     const { camera, gl } = useThree()
@@ -76,6 +93,30 @@ export function Ball({
     const arrowGroupRef = useRef<Group>(null)
     const shaftMeshRef = useRef<Mesh>(null)
     const coneMeshRef = useRef<Mesh>(null)
+    // The aim-range ring lives outside the RigidBody's own group so it
+    // doesn't spin along with the ball's rolling rotation — only its
+    // position is synced to the ball each frame, below.
+    const ringGroupRef = useRef<Group>(null)
+
+    const ringGeometry = useMemo(() => {
+      const segments = 64
+      const points: Vector3[] = []
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2
+        points.push(new Vector3(Math.cos(angle) * AIM_RING_RADIUS, 0, Math.sin(angle) * AIM_RING_RADIUS))
+      }
+      const geometry = new BufferGeometry().setFromPoints(points)
+      // LineDashedMaterial needs a cumulative "lineDistance" attribute along
+      // the path (normally set by THREE.Line's computeLineDistances(), which
+      // lives on the Object3D, not the geometry) — computed by hand here so
+      // it's ready as soon as the geometry is created.
+      const distances: number[] = [0]
+      for (let i = 1; i < points.length; i++) {
+        distances.push(distances[i - 1] + points[i].distanceTo(points[i - 1]))
+      }
+      geometry.setAttribute('lineDistance', new Float32BufferAttribute(distances, 1))
+      return geometry
+    }, [])
 
     function toNormalizedDevice(clientX: number, clientY: number): Vector2 {
       const rect = gl.domElement.getBoundingClientRect()
@@ -151,15 +192,34 @@ export function Ball({
     useFrame(() => {
       const body = bodyRef.current
       if (!body) return
-      if (body.translation().y < OUT_OF_BOUNDS_Y) {
+      const translation = body.translation()
+      if (translation.y < OUT_OF_BOUNDS_Y) {
         const [x, y, z] = teePosition
         body.setTranslation({ x, y, z }, true)
         body.setLinvel({ x: 0, y: 0, z: 0 }, true)
         body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        onPositionChange?.(x, z)
+        return
       }
+
+      // Keep the aim-range ring centered on the ball's current position
+      // (position only — deliberately not the ball's rolling rotation).
+      if (ringGroupRef.current) {
+        ringGroupRef.current.position.set(translation.x, 0.02, translation.z)
+      }
+      onPositionChange?.(translation.x, translation.z)
     })
 
   return (
+    <>
+    {/* Dashed aim-range ring — always visible, position-synced to the ball
+        but deliberately outside the RigidBody so it doesn't spin with the
+        ball's rolling rotation. */}
+    <group ref={ringGroupRef} position={teePosition}>
+      <lineLoop geometry={ringGeometry}>
+        <lineDashedMaterial color="#ffffff" dashSize={0.15} gapSize={0.12} transparent opacity={0.85} />
+      </lineLoop>
+    </group>
     <RigidBody
       ref={bodyRef}
       position={teePosition}
@@ -197,5 +257,6 @@ export function Ball({
         </group>
       )}
     </RigidBody>
+    </>
   )
 }

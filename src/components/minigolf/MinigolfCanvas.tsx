@@ -3,7 +3,7 @@ import { OrbitControls } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import { useRef, useState } from 'react'
 import { Ball } from './Ball'
-import { Course, TEE_POSITION } from './Course'
+import { Course, HOLE_POSITION, TEE_POSITION } from './Course'
 
 export default function MinigolfCanvas({
   onComplete,
@@ -18,6 +18,16 @@ export default function MinigolfCanvas({
   // not also respond to the same pointer drag — see Ball's onDragStart/
   // onDragEnd callbacks below.
   const [isAiming, setIsAiming] = useState(false)
+  // Updated directly (not via React state) on every physics frame, so the
+  // live distance readout doesn't trigger a re-render per frame.
+  const distanceRef = useRef<HTMLSpanElement>(null)
+
+  function handleBallPositionChange(x: number, z: number) {
+    const dx = x - HOLE_POSITION[0]
+    const dz = z - HOLE_POSITION[2]
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    if (distanceRef.current) distanceRef.current.textContent = `${distance.toFixed(1)}m to hole`
+  }
 
   function handleShotTaken() {
     if (startTimeRef.current === null) startTimeRef.current = performance.now()
@@ -37,6 +47,9 @@ export default function MinigolfCanvas({
       <div className="absolute top-3 left-3 z-10 rounded-full bg-cream-50/90 px-4 py-2 text-sm font-medium text-ink-900">
         Slag: {shots}
       </div>
+      <div className="absolute top-3 right-3 z-10 rounded-full bg-cream-50/90 px-4 py-2 text-sm font-medium text-ink-900">
+        <span ref={distanceRef}>-- m to hole</span>
+      </div>
       <Canvas
         camera={{ position: [0, 18, -22], fov: 55 }}
         onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
@@ -51,6 +64,7 @@ export default function MinigolfCanvas({
             onShotTaken={handleShotTaken}
             onDragStart={() => setIsAiming(true)}
             onDragEnd={() => setIsAiming(false)}
+            onPositionChange={handleBallPositionChange}
           />
         </Physics>
         <OrbitControls
