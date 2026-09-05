@@ -72,6 +72,22 @@ announced at the party.
   crowd the fairway or make the hole meaningfully harder to reach; they're
   flavor/scenery-as-obstacle in the spirit of minigolf, not a difficulty
   escalation.
+- **Concept-art reference confirmation** *(user shared a rendered concept
+  image of the desired final look)*: confirms and extends the visual-
+  style direction above. Two more concrete elements to add: a low stone
+  curb bordering the fairway path itself (distinct from, and inside, the
+  taller outer hedge boundary), and one or two sand-trap-style flat tan
+  patches as decorative ground detail (not necessarily physics obstacles
+  — a texture/color patch is enough). Also add simple text signage at the
+  tee ("START") and hole ("HOLE") if easy to render with what's already
+  in the stack (e.g. drei's `Text` or `Html` helpers) — skip it if it
+  adds real complexity, it's a nice-to-have, not a requirement.
+  **Explicitly out of scope**: matching the reference image's
+  photorealistic rendering quality (real textures, materials, lighting,
+  shadows) — that's a fundamentally different, much larger effort than
+  "simple stylized geometry," and stays out of scope for this feature.
+  The reference is for layout/element ideas, not a rendering-fidelity
+  target.
 - **What NOT to copy from the reference screenshot**: no par/currency/
   health-bar HUD widgets, no keyboard controls (drag-only, per the
   original spec) — that screenshot is a style/texture reference for the
