@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { ContactShadows, OrbitControls } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
 import { useRef, useState } from 'react'
 import { Ball } from './Ball'
@@ -51,22 +51,43 @@ export default function MinigolfCanvas({
         <span ref={distanceRef}>-- m to hole</span>
       </div>
       <Canvas
-        camera={{ position: [0, 18, -22], fov: 55 }}
+        camera={{ position: [0, 16, -19], fov: 45 }}
         onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
-        shadows
+        shadows="soft"
       >
-        <ambientLight intensity={0.7} />
-        <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
+        {/* Hemisphere light approximates soft bounced sky/ground light (a
+            cheap stand-in for ambient occlusion / GI) without needing an
+            external HDR environment map. Paired with a soft-shadowed
+            directional "sun" light for the polished-mobile-game look. */}
+        <hemisphereLight color="#bfe3ff" groundColor="#4a7c3a" intensity={0.65} />
+        <directionalLight
+          position={[6, 12, 4]}
+          intensity={1.2}
+          castShadow
+          shadow-mapSize={[2048, 2048]}
+          shadow-radius={4}
+        />
         <Physics gravity={[0, -9.81, 0]}>
           <Course onHoleEnter={handleHoleEnter} />
           <Ball
             teePosition={TEE_POSITION}
+            holePosition={HOLE_POSITION}
             onShotTaken={handleShotTaken}
             onDragStart={() => setIsAiming(true)}
             onDragEnd={() => setIsAiming(false)}
             onPositionChange={handleBallPositionChange}
           />
         </Physics>
+        {/* Soft ground-contact shadow blob for a cheap ambient-occlusion
+            feel under obstacles — purely visual, no physics involved. */}
+        <ContactShadows
+          position={[0, 0, 0]}
+          scale={[12, 24]}
+          opacity={0.45}
+          blur={2.5}
+          far={4}
+          resolution={512}
+        />
         <OrbitControls
           enabled={!isAiming}
           makeDefault

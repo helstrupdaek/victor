@@ -71,14 +71,22 @@ const UP = new Vector3(0, 1, 0)
 // math (which depends on drag distance, not a fixed world-space radius).
 const AIM_RING_RADIUS = 1.3
 
+// Open-Golf reference: within this radius of the cup, while resting/rolling
+// (not mid-bounce), a small constant nudge pulls the ball toward the hole —
+// a deliberate forgiveness mechanic for close putts, not a physics accident.
+const HOLE_ASSIST_RADIUS = 0.5
+const HOLE_ASSIST_STRENGTH = 0.05
+
 export function Ball({
   teePosition,
+  holePosition,
   onShotTaken,
   onDragStart,
   onDragEnd,
   onPositionChange,
 }: {
   teePosition: [number, number, number]
+  holePosition: [number, number, number]
   onShotTaken: () => void
   onDragStart?: () => void
   onDragEnd?: () => void
@@ -200,6 +208,23 @@ export function Ball({
         body.setAngvel({ x: 0, y: 0, z: 0 }, true)
         onPositionChange?.(x, z)
         return
+      }
+
+      // Hole-force assist (Open-Golf reference): nudge the ball toward the
+      // cup when it's close and rolling, not mid-bounce (checked via a small
+      // vertical-velocity threshold) — a deliberate near-miss forgiveness,
+      // not a substitute for the actual hole-sink sensor in Course.tsx.
+      const linvel = body.linvel()
+      const dxHole = holePosition[0] - translation.x
+      const dzHole = holePosition[2] - translation.z
+      const distToHole = Math.sqrt(dxHole * dxHole + dzHole * dzHole)
+      if (distToHole > 1e-4 && distToHole < HOLE_ASSIST_RADIUS && Math.abs(linvel.y) < 0.5) {
+        const nx = dxHole / distToHole
+        const nz = dzHole / distToHole
+        body.setLinvel(
+          { x: linvel.x + nx * HOLE_ASSIST_STRENGTH, y: linvel.y, z: linvel.z + nz * HOLE_ASSIST_STRENGTH },
+          true,
+        )
       }
 
       // Keep the aim-range ring centered on the ball's current position
