@@ -1,6 +1,7 @@
 import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier'
-import { RoundedBox, Text } from '@react-three/drei'
-import { useMemo } from 'react'
+import { RoundedBox, useGLTF } from '@react-three/drei'
+import { Suspense, useMemo } from 'react'
+import type { Group, Mesh } from 'three'
 import { createCheckerTexture } from './checkerTexture'
 
 // Course modeled on the real party garden's actual shape: "the whole garden
@@ -10,6 +11,16 @@ import { createCheckerTexture } from './checkerTexture'
 // corner near the hole and apple tree. The house (its own solid RigidBody)
 // is the inner boundary along one side for most of the course — no extra
 // wall needed there, the ball already bounces off the house.
+//
+// VISUALS vs. COLLIDERS: every collider below is authoritative and unchanged.
+// What the player *sees* for the boundary, house, carport, terrace, hedges,
+// curbs, bushes, tree, planters and signage comes from the glTF models under
+// public/models/minigolf/, built by
+// .superpowers/sdd/2026-09-03-minigolf/blender/build_environment.py from
+// these exact constants. A model's silhouette does not have to match its
+// collider exactly (e.g. the house model is ~3.9m deep while its collider is
+// 1.5m thick, and the hedges are 1.85m tall while their colliders are 4m) —
+// only the fairway-facing faces are kept flush, so bounces still look right.
 const WALL_HEIGHT = 2
 const WALL_THICKNESS = 0.4
 
@@ -119,38 +130,114 @@ const MOWER_SIZE: [number, number, number] = [0.3, 0.2, 0.4]
 const PLANTER_BOX_POSITION: [number, number, number] = [-2.9, 0.25, 5]
 const PLANTER_BASKET_POSITION: [number, number, number] = [-2.5, 0.2, -9]
 
-// Terrace/pavilion stand-in attached to the house's garden-facing wall — a
-// wooden deck with a simple pergola frame, dark wood tones, purely
-// decorative.
-const TERRACE_CENTER: [number, number, number] = [-2.9, 0, 1]
-const TERRACE_DECK_SIZE: [number, number, number] = [1.0, 0.15, 6]
-const TERRACE_POST_HEIGHT = 1.4
-const TERRACE_POST_OFFSETS: [number, number][] = [
-  [-0.4, -2.7],
-  [0.4, -2.7],
-  [-0.4, 2.7],
-  [0.4, 2.7],
-]
-
-// Low stone curb, purely decorative (no collider), loosely tracing the
-// inner playable edge — inset from whichever wall segment is the actual
-// boundary at that stretch.
-const CURB_INSET = 0.5
-const CURB_HEIGHT = 0.3
-const CURB_SEGMENTS: WallSpec[] = [
-  // Right side, tee zone — inset from R1.
-  { x: 2.2 - CURB_INSET, z: -9.4, halfX: 0.1, halfZ: 3.0 },
-  // Right side, main + hole zone — inset from R2.
-  { x: 7 - CURB_INSET, z: 0.5, halfX: 0.1, halfZ: 11.5 },
-  // Left side, hole zone flare — inset from L2.
-  { x: -6 + CURB_INSET, z: 10.25, halfX: 0.1, halfZ: 2.0 },
-]
-
 // Sand-trap decorative patches — flat tan circles, no special physics.
 const SAND_TRAPS: { position: [number, number, number]; radius: number }[] = [
   { position: [3, 0.02, -2], radius: 0.9 },
   { position: [-1, 0.02, 4], radius: 0.7 },
 ]
+
+// The terrace/pavilion (deck + pergola + lounge furniture, centred on
+// [-2.9, 0, 1]) and the low decorative stone curbs are now part of
+// garden.glb — they never had colliders, so nothing physical moved when
+// they stopped being hand-built meshes here.
+
+// --- glTF scenery ---------------------------------------------------------
+const MODEL_BASE = '/models/minigolf/'
+
+/**
+ * One instance of a glTF prop. `scene.clone(true)` shares the underlying
+ * geometries and materials between instances (Object3D.clone copies the node
+ * graph but keeps geometry/material references), so the two planters or the
+ * repeated bushes cost extra draw calls but no extra GPU memory. With a
+ * handful of props that is cheaper in complexity than wiring up
+ * <Instances>/<Instance>, which would need one instanced mesh per material
+ * inside each model.
+ */
+function GltfProp({
+  url,
+  position,
+  rotation,
+  scale = 1,
+}: {
+  url: string
+  position?: [number, number, number]
+  rotation?: [number, number, number]
+  scale?: number | [number, number, number]
+}) {
+  const { scene } = useGLTF(MODEL_BASE + url) as unknown as { scene: Group }
+  const model = useMemo(() => {
+    const clone = scene.clone(true)
+    clone.traverse((child) => {
+      if ((child as Mesh).isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    return clone
+  }, [scene])
+  return <primitive object={model} position={position} rotation={rotation} scale={scale} />
+}
+
+/**
+ * Everything visual that comes out of Blender. Kept behind its own Suspense
+ * boundary inside <Course> so the physics colliders (and therefore a
+ * playable, if bare, course) mount immediately and the scenery streams in.
+ *
+ * Nothing in here has a collider — the ball's boundaries are the
+ * CuboidColliders in <Course> below, which are unchanged.
+ */
+function GardenScenery() {
+  return (
+    <>
+      {/* House, carport, sunroom, terrace + furniture, hedges, curbs,
+          driveway, planting beds, boundary trees and background. Authored
+          in world course coordinates, so it drops in with no transform. */}
+      <GltfProp url="garden.glb" />
+
+      {/* Kenney Nature Kit bushes, normalised to radius 1 in the export so
+          the scale here is just the collider radius (plus a little, so the
+          model reads slightly fuller than its collision sphere). */}
+      <GltfProp url="bush_large.glb" position={[BUSH_POSITION[0], 0, BUSH_POSITION[2]]} scale={BUSH_RADIUS * 1.1} />
+      {SMALL_BUSHES.map((bush, i) => (
+        <GltfProp
+          key={i}
+          url="bush_small.glb"
+          position={[bush.position[0], 0, bush.position[2]]}
+          rotation={[0, i * 1.1, 0]}
+          scale={bush.radius * 1.2}
+        />
+      ))}
+
+      {/* Kenney tree_default with red "apple" spheres added in Blender. */}
+      <GltfProp url="tree_apple.glb" position={[APPLE_TREE_POSITION[0], 0, APPLE_TREE_POSITION[2]]} />
+
+      {/* Kenney pot_large + a flowering tuft, standing in for the two
+          planter/basket positions. */}
+      <GltfProp url="planter.glb" position={[PLANTER_BOX_POSITION[0], 0, PLANTER_BOX_POSITION[2]]} />
+      <GltfProp
+        url="planter.glb"
+        position={[PLANTER_BASKET_POSITION[0], 0, PLANTER_BASKET_POSITION[2]]}
+        rotation={[0, 0.7, 0]}
+        scale={0.85}
+      />
+
+      {/* START / HOLE signage. Modelled signs (Kenney sign + extruded 3D
+          text baked in Blender) rather than drei's <Text>, whose flat
+          ground-plane placement here was previously reported as rendering
+          mirrored. A modelled sign has no "mirrored glyph" failure mode:
+          the text is real geometry, oriented in the export by an explicit
+          right/up/normal basis with determinant +1. */}
+      <GltfProp url="sign_start.glb" position={[-3.0, 0, -9.6]} />
+      <GltfProp url="sign_hole.glb" position={[-1.6, 0, 11.9]} />
+
+      {/* Open-Golf flagstick in the cup (decorative — the hole sensor
+          below is what actually detects the ball). */}
+      <GltfProp url="flag.glb" position={[HOLE_POSITION[0], 0, HOLE_POSITION[2]]} />
+    </>
+  )
+}
+
+useGLTF.preload(MODEL_BASE + 'garden.glb')
 
 export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
   const fairwayTexture = useMemo(() => createCheckerTexture(FLOOR_SIZE[0] * 2, FLOOR_SIZE[2] * 2), [])
@@ -168,48 +255,17 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
         </mesh>
       </RigidBody>
 
-      {/* Boundary walls — physics colliders, with matching visible
-          hedge-styled meshes so the play area edge actually reads as a
-          wall. Built from independent segments (not 4 walls forming one
-          rectangle) so the shape can taper near the tee and flare near the
-          hole — see the WallSpec arrays above for the full layout and the
-          overlap/seam reasoning. */}
+      {/* Boundary walls — physics colliders only. What the player sees at
+          these positions is the hedge run / stone curb built into
+          garden.glb (tall clipped hedge on the outer edges, low grey curb
+          on the tee-zone edges, exactly as in the reference art). The
+          colliders are unchanged: same segments, same overlaps, same
+          4-unit height. */}
       <RigidBody type="fixed" colliders={false} restitution={0.4}>
         {ALL_WALLS.map((w, i) => (
           <CuboidCollider key={i} args={[w.halfX, WALL_HEIGHT, w.halfZ]} position={[w.x, WALL_HEIGHT / 2, w.z]} />
         ))}
-        {ALL_WALLS.map((w, i) => (
-          <RoundedBox
-            key={i}
-            args={[w.halfX * 2, WALL_HEIGHT * 2, w.halfZ * 2]}
-            radius={0.08}
-            smoothness={2}
-            position={[w.x, WALL_HEIGHT / 2, w.z]}
-            castShadow
-            receiveShadow
-          >
-            <meshStandardMaterial color="#3a7a2e" roughness={0.8} metalness={0} />
-          </RoundedBox>
-        ))}
       </RigidBody>
-
-      {/* Low stone curb — decorative only, loosely traces the inner edge
-          of the actual playable boundary at each stretch of the course. */}
-      <group>
-        {CURB_SEGMENTS.map((c, i) => (
-          <RoundedBox
-            key={i}
-            args={[c.halfX * 2, CURB_HEIGHT, c.halfZ * 2]}
-            radius={0.04}
-            smoothness={2}
-            position={[c.x, CURB_HEIGHT / 2, c.z]}
-            castShadow
-            receiveShadow
-          >
-            <meshStandardMaterial color="#c3bbaa" roughness={0.85} metalness={0} />
-          </RoundedBox>
-        ))}
-      </group>
 
       {/* Sand-trap decorative patches — flat tan circles, no special physics */}
       {SAND_TRAPS.map((trap, i) => (
@@ -221,11 +277,24 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
 
       {/* House — runs along the -X edge of the lawn for the middle
           stretch of the course; its own collider is the inner boundary
-          there, no separate wall needed. */}
+          there, no separate wall needed. The visible house is the one in
+          garden.glb, whose fairway-facing wall is flush with this box's
+          -3.5 face, so this mesh must not draw.
+          IMPORTANT — it is hidden via the MATERIAL's `visible`, not the
+          mesh's. `colliders="cuboid"` derives this body's collider by
+          walking the object graph, and @react-three/rapier uses
+          `object.traverseVisible()` unless the undocumented
+          `includeInvisible` flag is set. Putting `visible={false}` on the
+          <mesh> therefore silently deletes the house collider — verified
+          the hard way: with the mesh hidden that way, a full-power tee shot
+          left the course entirely and hit Ball.tsx's out-of-bounds reset.
+          `material.visible = false` skips the draw call (three.js filters on
+          it when building the render list) while leaving Object3D.visible
+          true, so the collider is created exactly as before. */}
       <RigidBody type="fixed" colliders="cuboid">
-        <mesh position={HOUSE_POSITION} castShadow>
+        <mesh position={HOUSE_POSITION}>
           <boxGeometry args={HOUSE_SIZE} />
-          <meshStandardMaterial color="#9c8f76" roughness={0.75} metalness={0} />
+          <meshStandardMaterial color="#9c8f76" roughness={0.75} metalness={0} visible={false} />
         </mesh>
       </RigidBody>
 
@@ -239,51 +308,6 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
         />
       </RigidBody>
 
-      {/* Terrace/pavilion — wooden deck + pergola frame, against the house */}
-      <group>
-        <RoundedBox
-          args={TERRACE_DECK_SIZE}
-          radius={0.05}
-          smoothness={2}
-          position={[TERRACE_CENTER[0], 0.08, TERRACE_CENTER[2]]}
-          castShadow
-          receiveShadow
-        >
-          <meshStandardMaterial color="#9c7850" roughness={0.55} metalness={0} />
-        </RoundedBox>
-        {TERRACE_POST_OFFSETS.map(([dx, dz], i) => (
-          <RoundedBox
-            key={i}
-            args={[0.08, TERRACE_POST_HEIGHT, 0.08]}
-            radius={0.02}
-            smoothness={2}
-            position={[TERRACE_CENTER[0] + dx, TERRACE_POST_HEIGHT / 2, TERRACE_CENTER[2] + dz]}
-            castShadow
-          >
-            <meshStandardMaterial color="#523c2a" roughness={0.55} metalness={0} />
-          </RoundedBox>
-        ))}
-        <RoundedBox
-          args={[1.1, 0.08, 6.2]}
-          radius={0.03}
-          smoothness={2}
-          position={[TERRACE_CENTER[0], TERRACE_POST_HEIGHT, TERRACE_CENTER[2]]}
-          castShadow
-        >
-          <meshStandardMaterial color="#523c2a" roughness={0.55} metalness={0} />
-        </RoundedBox>
-        {/* Outdoor-kitchen stand-in block at one end of the deck */}
-        <RoundedBox
-          args={[0.7, 0.65, 0.6]}
-          radius={0.04}
-          smoothness={2}
-          position={[TERRACE_CENTER[0], 0.4, TERRACE_CENTER[2] - 2.4]}
-          castShadow
-        >
-          <meshStandardMaterial color="#5c5c5c" roughness={0.5} metalness={0.15} />
-        </RoundedBox>
-      </group>
-
       {/* Robot lawnmower — small dark box, tucked beside the tee */}
       <RigidBody type="fixed" colliders={false} restitution={0.3}>
         <CuboidCollider args={[MOWER_SIZE[0] / 2, MOWER_SIZE[1] / 2, MOWER_SIZE[2] / 2]} position={MOWER_POSITION} />
@@ -292,73 +316,16 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
         </RoundedBox>
       </RigidBody>
 
-      {/* Planter/flower baskets — decorative only, warm/earthy tones */}
-      <RoundedBox args={[0.4, 0.5, 0.4]} radius={0.04} smoothness={2} position={PLANTER_BOX_POSITION} castShadow>
-        <meshStandardMaterial color="#b8632f" roughness={0.7} metalness={0.1} />
-      </RoundedBox>
-      <mesh position={PLANTER_BASKET_POSITION} castShadow>
-        <cylinderGeometry args={[0.28, 0.22, 0.4, 16]} />
-        <meshStandardMaterial color="#c9a06e" roughness={0.75} metalness={0} />
-      </mesh>
-
-      {/* Round clipped bush — a dome-shaped shrub to bank shots around */}
+      {/* Bush colliders — unchanged. The visible bushes come from the
+          Kenney models in <GardenScenery />. */}
       <RigidBody type="fixed" colliders={false} restitution={0.5}>
         <BallCollider args={[BUSH_RADIUS]} position={BUSH_POSITION} />
-        <mesh position={BUSH_POSITION} castShadow>
-          <sphereGeometry args={[BUSH_RADIUS, 24, 18]} />
-          <meshStandardMaterial color="#4a8438" roughness={0.85} metalness={0} />
-        </mesh>
       </RigidBody>
-
-      {/* Additional trimmed bushes, guarding the tight lines through the
-          open lawn */}
       {SMALL_BUSHES.map((bush, i) => (
         <RigidBody key={i} type="fixed" colliders={false} restitution={0.5}>
           <BallCollider args={[bush.radius]} position={bush.position} />
-          <mesh position={bush.position} castShadow>
-            <sphereGeometry args={[bush.radius, 18, 14]} />
-            <meshStandardMaterial color="#4a8438" roughness={0.85} metalness={0} />
-          </mesh>
         </RigidBody>
       ))}
-
-      {/* Apple tree near the hole — decorative only, no collider */}
-      <group position={APPLE_TREE_POSITION}>
-        <mesh castShadow position={[0, 0, 0]}>
-          <cylinderGeometry args={[0.08, 0.1, 1.2, 10]} />
-          <meshStandardMaterial color="#654028" roughness={0.8} metalness={0} />
-        </mesh>
-        <mesh castShadow position={[0, 0.85, 0]}>
-          <sphereGeometry args={[0.55, 18, 14]} />
-          <meshStandardMaterial color="#5a8f3f" roughness={0.85} metalness={0} />
-        </mesh>
-      </group>
-
-      {/* START / HOLE signage — flat text lying on the fairway */}
-      <Text
-        position={[TEE_POSITION[0], 0.03, TEE_POSITION[2] + 1.1]}
-        rotation={[-Math.PI / 2, 0, Math.PI]}
-        fontSize={0.5}
-        color="#ffffff"
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.02}
-        outlineColor="#1a3a12"
-      >
-        START
-      </Text>
-      <Text
-        position={[HOLE_POSITION[0], 0.03, HOLE_POSITION[2] - 1.1]}
-        rotation={[-Math.PI / 2, 0, Math.PI]}
-        fontSize={0.5}
-        color="#ffffff"
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.02}
-        outlineColor="#1a3a12"
-      >
-        HOLE
-      </Text>
 
       {/* Hole (visual cup) + sensor that detects the ball */}
       <mesh position={[HOLE_POSITION[0], 0.01, HOLE_POSITION[2]]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -368,6 +335,10 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
       <RigidBody type="fixed" colliders={false} sensor onIntersectionEnter={onHoleEnter}>
         <CuboidCollider args={[0.25, 0.3, 0.25]} position={HOLE_POSITION} />
       </RigidBody>
+
+      <Suspense fallback={null}>
+        <GardenScenery />
+      </Suspense>
     </group>
   )
 }

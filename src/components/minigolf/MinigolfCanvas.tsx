@@ -54,18 +54,36 @@ export default function MinigolfCanvas({
         camera={{ position: [0, 16, -19], fov: 45 }}
         onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
         shadows="soft"
+        // `flat` switches the renderer from R3F's default ACES Filmic tone
+        // mapping to NoToneMapping. ACES rolls off highlights and noticeably
+        // desaturates — with the flat-coloured glTF garden it rendered as a
+        // muted, olive-grey scene rather than the bright saturated look of
+        // House/course layout.png. This is the exact three.js analogue of the
+        // Blender-side gotcha where the default AgX view transform had to be
+        // set to 'Standard' for the same reason.
+        flat
       >
+        {/* Sky-blue clear colour. Only a sliver shows at the default camera
+            angle, but as soon as the player orbits up it is the difference
+            between a horizon and the page's cream background bleeding in. */}
+        <color attach="background" args={['#8ec6ef']} />
+
         {/* Hemisphere light approximates soft bounced sky/ground light (a
             cheap stand-in for ambient occlusion / GI) without needing an
             external HDR environment map. Paired with a soft-shadowed
             directional "sun" light for the polished-mobile-game look. */}
-        <hemisphereLight color="#bfe3ff" groundColor="#4a7c3a" intensity={0.65} />
+        <hemisphereLight color="#cfeaff" groundColor="#5d9a48" intensity={1.15} />
         <directionalLight
           position={[6, 12, 4]}
-          intensity={1.2}
+          intensity={1.9}
           castShadow
           shadow-mapSize={[2048, 2048]}
           shadow-radius={4}
+          shadow-camera-left={-20}
+          shadow-camera-right={20}
+          shadow-camera-top={20}
+          shadow-camera-bottom={-20}
+          shadow-camera-far={60}
         />
         <Physics gravity={[0, -9.81, 0]}>
           <Course onHoleEnter={handleHoleEnter} />
@@ -79,13 +97,16 @@ export default function MinigolfCanvas({
           />
         </Physics>
         {/* Soft ground-contact shadow blob for a cheap ambient-occlusion
-            feel under obstacles — purely visual, no physics involved. */}
+            feel under obstacles — purely visual, no physics involved.
+            Opacity dropped from 0.45: with the glTF garden's much taller
+            hedges/house now inside its `far` range it was laying a broad
+            grey wash over the middle of the fairway. */}
         <ContactShadows
-          position={[0, 0, 0]}
-          scale={[12, 24]}
-          opacity={0.45}
-          blur={2.5}
-          far={4}
+          position={[0, 0.002, 0]}
+          scale={[14, 26]}
+          opacity={0.22}
+          blur={3}
+          far={2.5}
           resolution={512}
         />
         <OrbitControls

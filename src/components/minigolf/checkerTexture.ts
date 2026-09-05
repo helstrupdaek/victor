@@ -18,7 +18,11 @@ export function createCheckerTexture(repeatX: number, repeatY: number): CanvasTe
     const cell = size / squares
     for (let y = 0; y < squares; y++) {
       for (let x = 0; x < squares; x++) {
-        ctx.fillStyle = (x + y) % 2 === 0 ? '#4a8c3f' : '#3f7a35'
+        // Brightened from #58ab3f/#479236 during the visual-integration pass:
+        // against the glTF garden's flat stylized greens the old pair read as
+        // a dark olive fairway rather than the vivid mown lawn in
+        // House/course layout.png.
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#78cf4e' : '#63b93f'
         ctx.fillRect(x * cell, y * cell, cell, cell)
       }
     }
