@@ -1,7 +1,7 @@
 import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier'
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import { Suspense, useMemo } from 'react'
-import { BackSide } from 'three'
+import { BackSide, Path, Shape, ShapeGeometry } from 'three'
 import type { Group, Mesh } from 'three'
 import { createCheckerTexture } from './checkerTexture'
 import { applyHouseMaterials } from './houseMaterials'
@@ -223,7 +223,10 @@ const FLOOR_POSITION: [number, number, number] = [2.75, -0.05, 0]
  */
 const HOLE_RADIUS = 0.33
 /** How deep the ball sinks. Enough to read as gone, shallow enough to see it. */
-const CUP_DEPTH = 0.34
+// Deepened 0.34 -> 0.45 so the drop reads properly. The ball is 0.3 across,
+// so at 0.45 it settles entirely below the rim with shaft still visible above
+// it, rather than sitting flush in a dish.
+const CUP_DEPTH = 0.45
 
 /**
  * The floor collider, split around the cup so the hole is a REAL hole.
@@ -251,6 +254,52 @@ const CUP_DEPTH = 0.34
  * max-power balls crossing that seam, which the out-of-bounds watchdog
  * recovers. Recorded in gameplay-tuning-doc.md rather than chased further.
  */
+/**
+ * The VISIBLE lawn surface, with the cup cut out of it.
+ *
+ * The floor used to be a solid boxGeometry whose top sits at y = 0, and the
+ * collider gap alone is not enough: a live probe of the rendered scene, ray
+ * cast straight down the cup axis, found three surfaces roofing it over — this
+ * box, plus hole_green_ring at y 0.002 and hole_green_pad at 0.005. So the
+ * ball dropped through the collider gap and simply disappeared under unbroken
+ * grass; the shaft below was never visible from any angle. The two Blender
+ * discs are now annuli; this is the third.
+ *
+ * A flat surface rather than a box. The box's sides were never visible — the
+ * garden apron and surround ground from garden.glb cover every edge — and a
+ * Shape with a hole is the only way to express a round opening.
+ *
+ * UVs are remapped to 0..1 across the rectangle, which is exactly what
+ * boxGeometry gave its top face, so the checker scale is unchanged.
+ */
+function makeFloorSurface() {
+  const x0 = FLOOR_POSITION[0] - FLOOR_SIZE[0] / 2
+  const x1 = FLOOR_POSITION[0] + FLOOR_SIZE[0] / 2
+  const z0 = FLOOR_POSITION[2] - FLOOR_SIZE[2] / 2
+  const z1 = FLOOR_POSITION[2] + FLOOR_SIZE[2] / 2
+  // Authored in shape space (sx, sy), which rotateX(-PI/2) maps to world
+  // (sx, 0, -sy) — so sy is -z.
+  const shape = new Shape()
+  shape.moveTo(x0, -z1)
+  shape.lineTo(x1, -z1)
+  shape.lineTo(x1, -z0)
+  shape.lineTo(x0, -z0)
+  shape.closePath()
+  const cup = new Path()
+  cup.absarc(HOLE_POSITION[0], -HOLE_POSITION[2], HOLE_RADIUS, 0, Math.PI * 2, true)
+  shape.holes.push(cup)
+
+  const g = new ShapeGeometry(shape, 40)
+  const pos = g.attributes.position
+  const uv = g.attributes.uv
+  for (let i = 0; i < pos.count; i++) {
+    uv.setXY(i, (pos.getX(i) - x0) / (x1 - x0), (-pos.getY(i) - z0) / (z1 - z0))
+  }
+  uv.needsUpdate = true
+  g.rotateX(-Math.PI / 2)
+  return g
+}
+
 const FLOOR_SLABS: { x: number; z: number; halfX: number; halfZ: number }[] = (() => {
   const x0 = FLOOR_POSITION[0] - FLOOR_SIZE[0] / 2
   const x1 = FLOOR_POSITION[0] + FLOOR_SIZE[0] / 2
@@ -464,6 +513,7 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
   // alternates correctly across the seam (4 is even), so 1.5 tiles is seamless
   // where e.g. 1.25 would not be.
   const fairwayTexture = useMemo(() => createCheckerTexture(1.0, 1.5), [])
+  const floorSurface = useMemo(makeFloorSurface, [])
 
   return (
     <group>
@@ -472,8 +522,7 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
           shape; anything outside them just reads as "more garden/hedge
           beyond the fairway", which is fine for a real yard). */}
       <RigidBody type="fixed" colliders={false} friction={0.8}>
-        <mesh position={FLOOR_POSITION} receiveShadow>
-          <boxGeometry args={FLOOR_SIZE} />
+        <mesh geometry={floorSurface} receiveShadow>
           <meshStandardMaterial map={fairwayTexture} roughness={0.8} metalness={0} />
         </mesh>
         {/* THE HOLE IS NOW AN ACTUAL HOLE.
@@ -614,11 +663,16 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
           visibly drops below the turf. */}
       <mesh position={[HOLE_POSITION[0], -CUP_DEPTH / 2, HOLE_POSITION[2]]}>
         <cylinderGeometry args={[HOLE_RADIUS, HOLE_RADIUS, CUP_DEPTH, 28, 1, true]} />
-        <meshStandardMaterial color="#20211f" roughness={0.95} side={BackSide} />
+        {/* UNLIT. A standard material here picks up the hemisphere light, whose
+            groundColor is #7b9a60 — so the inside of the cup was rendering with
+            a green cast and reading as shadowed grass rather than as an
+            opening. A hole is the absence of light; basic material is the
+            honest way to say that, and it is cheaper. */}
+        <meshBasicMaterial color="#191a18" side={BackSide} />
       </mesh>
       <mesh position={[HOLE_POSITION[0], -CUP_DEPTH + 0.01, HOLE_POSITION[2]]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[HOLE_RADIUS, 28]} />
-        <meshStandardMaterial color="#131412" roughness={1} />
+        <meshBasicMaterial color="#0d0e0c" />
       </mesh>
       {/* Sensor sits INSIDE the cup now, below the turf line, so it reports a
           ball that has actually dropped rather than one rolling over the top. */}
