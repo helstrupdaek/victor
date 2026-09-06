@@ -1,11 +1,10 @@
 import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier'
 import { RoundedBox, useGLTF } from '@react-three/drei'
-import { Suspense, useMemo, useRef } from 'react'
+import { Suspense, useMemo } from 'react'
 import { BackSide, Path, Shape, ShapeGeometry } from 'three'
-import type { Group, Mesh, Object3D } from 'three'
-import { useFrame } from '@react-three/fiber'
-import { ballState } from './ballState'
+import type { Group, Mesh } from 'three'
 import { createCheckerTexture } from './checkerTexture'
+import { Victor } from './Victor'
 import { applyHouseMaterials } from './houseMaterials'
 
 // Course modeled on the real party garden's actual shape: "the whole garden
@@ -394,82 +393,6 @@ const SAND_TRAPS: { position: [number, number, number]; radius: number }[] = [
 // --- glTF scenery ---------------------------------------------------------
 const MODEL_BASE = '/models/minigolf/'
 
-/**
- * Victor, standing in his own garden. Placeholder: the character gate has not
- * passed, so this is the photo-projected build with no rig and no behaviour.
- *
- * Off the tee-to-hole line and away from the open middle of the lawn — see the
- * note where he is mounted.
- */
-const VICTOR_POSITION: [number, number, number] = [8.8, 0, 6.4]
-/**
- * Victor watching the ball. HEAD LEADS, BODY FOLLOWS.
- *
- * Turning the whole figure to face the ball reads as a turret. People move
- * their head first and only turn their body when their neck runs out, so the
- * head takes the rotation up to a realistic limit and the body makes up the
- * rest, more slowly.
- *
- * Rotation ONLY — he lives inside <GardenScenery>, which has no colliders, so
- * nothing here touches the simulation. ballState is written one-way by <Ball>
- * and only read here.
- */
-const NECK_LIMIT = (68 * Math.PI) / 180
-const VICTOR_HEAD_TAU = 0.22      // the head snaps round fairly quickly
-const VICTOR_BODY_TAU = 0.9       // the body is slow and reluctant
-
-const shortestAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
-
-function VictorProp() {
-  const groupRef = useRef<Group>(null)
-  const headRef = useRef<Object3D | null>(null)
-  const bodyYaw = useRef(0)
-  const headYaw = useRef(0)
-
-  useFrame((_, rawDelta) => {
-    const g = groupRef.current
-    if (!g) return
-    // The head is its own node in the glb, and build_victor.py leaves its
-    // origin at the head's centre, so rotating it pivots at the neck rather
-    // than at the feet.
-    if (!headRef.current) {
-      g.traverse((o) => {
-        if (!headRef.current && o.name.toLowerCase().includes('head')) headRef.current = o
-      })
-    }
-    const dt = Math.min(rawDelta, 1 / 20)
-    const dx = ballState.x - VICTOR_POSITION[0]
-    const dz = ballState.z - VICTOR_POSITION[2]
-    if (dx * dx + dz * dz < 1e-4) return
-
-    // The model faces local +Z. build_victor.py builds him facing Blender -Y,
-    // and the glTF exporter's Y-up conversion maps Blender (x, y, z) to
-    // (x, z, -y) — so -Y becomes +Z, not -Z. Assuming -Z put his back to the
-    // player with the numbers still reporting a perfect match, which is why
-    // this is worth stating rather than leaving as a sign.
-    // A Y-rotation by b sends +Z to (sin b, 0, cos b), so aim is atan2(dx, dz).
-    const want = Math.atan2(dx, dz)
-
-    // Body only turns once the neck runs out, and then only far enough to
-    // bring the ball back inside comfortable range.
-    const rel = shortestAngle(want - bodyYaw.current)
-    if (Math.abs(rel) > NECK_LIMIT) {
-      const target = want - Math.sign(rel) * NECK_LIMIT * 0.55
-      bodyYaw.current += shortestAngle(target - bodyYaw.current) * (1 - Math.exp(-dt / VICTOR_BODY_TAU))
-    }
-    g.rotation.y = bodyYaw.current
-
-    const wantHead = Math.max(-NECK_LIMIT, Math.min(NECK_LIMIT, shortestAngle(want - bodyYaw.current)))
-    headYaw.current += (wantHead - headYaw.current) * (1 - Math.exp(-dt / VICTOR_HEAD_TAU))
-    if (headRef.current) headRef.current.rotation.y = headYaw.current
-  })
-
-  return (
-    <group ref={groupRef} position={VICTOR_POSITION}>
-      <GltfProp url="victor.glb" />
-    </group>
-  )
-}
 
 /**
  * One instance of a glTF prop. `scene.clone(true)` shares the underlying
@@ -586,7 +509,7 @@ function GardenScenery() {
           toward the far hedge, so he is clearly visible from the behind-ball
           camera looking up the garden without standing anywhere the ball
           usually travels or occupying the open middle of the lawn. */}
-      <VictorProp />
+      <Victor />
     </>
   )
 }

@@ -51,9 +51,11 @@ begin
   where n.nspname = 'public'
     and t.relname = 'minigolf_scores'
     and c.contype = 'u'
-    and (select array_agg(a.attname order by a.attnum)
+    -- attname is `name`, not `text`, and Postgres has no name[] = text[]
+    -- operator — cast each element so the comparison is text[] = text[].
+    and (select array_agg(a.attname::text order by a.attnum)
          from unnest(c.conkey) k
-         join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k) = array['guest_email'];
+         join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k) = array['guest_email']::text[];
   if con_name is not null then
     execute format('alter table public.minigolf_scores drop constraint %I', con_name);
   end if;
