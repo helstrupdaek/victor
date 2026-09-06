@@ -254,7 +254,13 @@ export default function MinigolfCanvas({
         // came down 54 -> 46 with the move to a ball-centric rig: at 6 m from
         // the subject, 54 degrees stretches the near lawn and shrinks the house
         // into the distance, which is the opposite of what this scene needs.
-        camera={{ position: [9, 10.6, -20.5], fov: 46 }}
+        // fov 54 -> 46 with the ball-centric rig, then 46 -> 40 to get the
+        // boundary hedge out of the bottom of the tee framing without touching
+        // the hedge itself (see clampToGarden in GameCamera.tsx). Narrower also
+        // suits a behind-the-ball golf view: at 6 m from the subject, 54
+        // degrees stretched the near lawn and shrank the house into the
+        // distance, which is the opposite of what this scene needs.
+        camera={{ position: [9, 10.6, -20.5], fov: 40 }}
         onCreated={({ camera, gl, scene }) => {
           camera.lookAt(...CAMERA_TARGET)
           // DEV-ONLY measurement handle. This project has twice shipped a

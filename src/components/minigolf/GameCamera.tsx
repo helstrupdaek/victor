@@ -102,23 +102,103 @@ const ZOOM_MIN = 0.62
 const ZOOM_MAX = 2.1
 
 /**
- * Keep the eye out of solid objects — NOT inside the play area.
+ * Boundary handling for the eye. Two jobs, and they are different.
  *
- * The first version clamped the eye to the collider faces, which was wrong and
- * the live test caught it immediately: the tee sits 2.25 m from the tee-end
- * hedge, so a 6.2 m stand-off was clamped to 1.8 m and the opening shot was
- * framed from almost directly overhead. The boundary hedge is only 0.95 m tall,
- * so a camera 3.6 m up looks straight over it — being outside the property is
- * fine, being inside the house is not.
+ * (1) Never enter the building. The interior is unmodelled, so a shot framed
+ *     from inside it is framed through a black wall.
+ * (2) When the rig puts the eye OUTSIDE the property — which it must at the
+ *     tee, where the ball is 2.25 m from the end hedge and the stand-off is
+ *     6.2 m — lift it enough that the boundary hedge drops out of frame.
+ *
+ * The hedge is not moved, shrunk or deleted; it is real property geometry. The
+ * fix is composition only. Solved rather than guessed: with the eye 3.95 m
+ * outside at the tee and 3.4 m up, the 0.95 m hedge sits 34.6 degrees below
+ * horizontal while the frame bottom is at 40.4, so it filled the bottom 12.6%
+ * of the screen. Raising the eye alone needs ~6 m to clear it — that is an
+ * overview camera again — so the fov comes down to 40 as well, and then a
+ * 0.35 m lift per metre outside is enough: the hedge goes to 47.2 degrees
+ * against a frame bottom of 45.4, i.e. just out of shot, with the eye at 4.8 m
+ * rather than 6.
+ *
+ * The lift is proportional, so it is zero for every ball that rests out on the
+ * lawn — the normal case keeps the tuned 3.25 m height exactly.
  */
-function clampToGarden(v: Vector3) {
-  // The building is the one thing the eye must never enter: the interior is
-  // unmodelled, so the shot would be framed through a black wall.
-  if (v.z > -7.4 && v.z < 9.4) v.x = Math.max(v.x, -2.6)
+const OUTSIDE_LIFT = 0.35
+/** Never closer than this, however hard the constraints push. */
+const MIN_BACK = 2.2
+/**
+ * The building's footprint, as the eye must avoid it. Tighter in Z than the
+ * first version's (-7.4, 9.4): the house ends at Z 8.0, and the extra 1.4 m
+ * was reaching into the hole flare, which is open lawn the ball legitimately
+ * rests on.
+ */
+const HOUSE_GUARD_X = -2.6
+const HOUSE_GUARD_Z0 = -6.6
+const HOUSE_GUARD_Z1 = 8.3
+
+function insideBuilding(x: number, z: number) {
+  return x < HOUSE_GUARD_X && z > HOUSE_GUARD_Z0 && z < HOUSE_GUARD_Z1
+}
+
+/**
+ * How far behind the ball the eye can actually sit on this aim line.
+ *
+ * The first version clamped the eye's X and Z INDEPENDENTLY, and the lifecycle
+ * test caught what that does: with the ball at (-5.38, 9.41) in the hole flare
+ * and the aim east toward the cup, the desired eye at X -11.4 was clamped to
+ * -2.6 by the building guard — which is on the FAR SIDE of the ball. The
+ * camera ended up in front of the ball looking away from it, 96 degrees off
+ * the hole, with the ball 2.2 m off-frame.
+ *
+ * Shortening the stand-off ALONG the aim line instead cannot do that: the eye
+ * stays on the ray behind the ball by construction, and only gets closer.
+ */
+function usableBack(ballX: number, ballZ: number, dirX: number, dirZ: number, want: number) {
+  if (!insideBuilding(ballX - dirX * want, ballZ - dirZ * want)) return want
+  for (let t = want; t >= MIN_BACK; t -= 0.2) {
+    if (!insideBuilding(ballX - dirX * t, ballZ - dirZ * t)) return t
+  }
+  return MIN_BACK
+}
+
+/**
+ * Height only. The eye's horizontal position is settled by usableBack above.
+ *
+ * When the rig puts the eye OUTSIDE the property — which it must at the tee,
+ * where the ball is 2.25 m from the end hedge and the stand-off is 6.2 m — it
+ * is lifted so the boundary hedge drops out of frame. The hedge is not moved,
+ * shrunk or deleted; it is real property geometry, and the fix is composition
+ * only. Solved rather than guessed: with the eye 3.95 m outside at the tee and
+ * 3.4 m up, the 0.95 m hedge sat 34.6 degrees below horizontal against a frame
+ * bottom of 40.4, filling the bottom 12.6% of the screen. Lifting alone needs
+ * ~6 m to clear it — an overview camera again — so the fov came down to 40 as
+ * well, and then 0.35 m per metre outside is enough: the hedge goes to 47.2
+ * degrees against a frame bottom of 45.4, i.e. just out of shot, with the eye
+ * at 4.8 m rather than 6.
+ *
+ * Proportional, so it is exactly zero for any ball resting out on the lawn —
+ * the normal case keeps the tuned 3.25 m height untouched.
+ */
+/**
+ * Last resort for the one position the stand-off search cannot solve: a ball
+ * resting in the narrow hole flare right beside the house's north end, where
+ * the aim line to the cup runs straight through the building and even
+ * MIN_BACK lands behind it.
+ *
+ * Rotating the aim away would break "the camera settles behind the intended
+ * shot direction", and moving closer than MIN_BACK puts the eye on the ball.
+ * So the eye goes OVER the roof instead: walls top out at 2.5 m and the roof
+ * adds 1.15, so 4.6 m clears the ridge with margin, and looking down from
+ * there still frames the ball and the cup beyond it.
+ */
+const ROOF_CLEARANCE = 4.6
+
+function applyBoundaryLift(v: Vector3) {
+  if (insideBuilding(v.x, v.z)) v.y = Math.max(v.y, ROOF_CLEARANCE)
+  const outside = Math.max(0, -12.25 - v.z, v.z - 12.25, -3.32 - v.x, v.x - 11.1)
+  v.y += outside * OUTSIDE_LIFT
   v.x = MathUtils.clamp(v.x, -8.5, 16)
   v.z = MathUtils.clamp(v.z, -18, 18)
-  // Comfortably above the 0.95 m hedge, so looking in over the boundary never
-  // puts a wall of foliage across the bottom of the frame.
   v.y = Math.max(v.y, 2.3)
 }
 
@@ -268,10 +348,11 @@ export function GameCamera({
     // who drags upward genuinely raises the eye instead of nothing happening.
     const pitchScale = Math.tan(pitch.current) / Math.tan(Math.atan2(CAMERA_HEIGHT, BACK_DISTANCE))
 
+    const usedBack = usableBack(ball.x, ball.z, dirX, dirZ, back)
     const desiredEye = new Vector3(
-      ball.x - dirX * back,
+      ball.x - dirX * usedBack,
       ball.y + height * pitchScale,
-      ball.z - dirZ * back,
+      ball.z - dirZ * usedBack,
     )
     // The terrace pergola is the one prop tall enough to sit between the eye
     // and a resting ball: a ball that rolls onto the deck (a deliberately
@@ -282,7 +363,7 @@ export function GameCamera({
     if (ball.x < -2.1 && ball.z > 4.3 && ball.z < 8.4) {
       desiredEye.y = Math.max(desiredEye.y, 4.9)
     }
-    clampToGarden(desiredEye)
+    applyBoundaryLift(desiredEye)
 
     // Never aim past the hole on an approach: the look-ahead point is capped
     // to just short of the cup, which is what keeps a short putt readable.

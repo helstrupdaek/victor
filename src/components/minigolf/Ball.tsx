@@ -13,27 +13,83 @@ import {
 } from 'three'
 
 const BALL_RADIUS = 0.15
-const MAX_DRAG_DISTANCE = 3
-// HALVED, 0.8 -> 0.4, at the owner's request: maximum shot speed goes from
-// ~167 m/s to ~84 m/s. Scaling the impulse rather than shortening
-// MAX_DRAG_DISTANCE keeps the full drag range available for fine control —
-// capping the drag instead would have made the whole power range reachable in
-// half a swipe, which is harder to aim, not easier.
-//
-// It also all but closes the recorded bush-launch defect: the headless
-// revalidation measured its onset at 80 m/s, so the reachable window shrinks
-// from 87 m/s wide to about 4. See gameplay-tuning-doc.md.
-const IMPULSE_SCALE = 0.4
 const OUT_OF_BOUNDS_Y = -5
-// ROLL LENGTH. Both were 0.4. The owner reported the ball still running on far
-// too long after the power halving, and with velocity decaying as e^(-d*t) the
-// distance to a stop is roughly proportional to 1/d — so 1.15 cuts the roll to
-// under a third of what it was, on top of the halved launch speed.
-// Raised together on purpose: damping only the linear term leaves the ball
-// visibly spinning after it has stopped translating.
+// ROLL LENGTH. Both were 0.4. With velocity decaying as e^(-d*t) the distance
+// to a stop is roughly proportional to 1/d, so 1.15 cuts the roll to under a
+// third. Raised together on purpose: damping only the linear term leaves the
+// ball visibly spinning after it has stopped translating.
 const LINEAR_DAMPING = 1.15
 const ANGULAR_DAMPING = 1.15
-const MIN_DRAG_TO_SHOOT = 0.05
+
+/**
+ * Screen drag, in normalised-device units, that reaches full power. 0.6 NDC is
+ * 270 px of vertical travel on a 900 px-tall viewport: a comfortable full
+ * swipe, and unchanged from the linear version so the gesture still feels the
+ * same size.
+ */
+const DRAG_FOR_FULL_POWER = 0.6
+/** Below this the drag is a click, not a shot. ~4.5 px. */
+const MIN_DRAG_TO_SHOOT = 0.01
+
+/**
+ * THE POWER CURVE — piecewise-linear, mapping input fraction to LAUNCH SPEED
+ * in m/s. Derived from measurement, not from picking an exponent.
+ *
+ * The old mapping was linear: impulse = drag x 0.4, giving 0 to 84 m/s. Two
+ * things were wrong with it. A minimum tap overshot a 40 cm putt to 2.2 m, and
+ * at the other end 84 m/s carries the ball 65.7 m on flat ground — in a garden
+ * 24 m across, with the longest straight shot 20.8 m. So most of the input
+ * range was spent on power that could never be used, and almost none of it on
+ * the putting range where all the precision is needed.
+ *
+ * Method: calibrate_power.mjs rebuilds this ball in this world on open lawn,
+ * measures speed -> flat travel, then bisects the inverse to get the launch
+ * speed for a target distance. The anchors below are those measured speeds for
+ * a chosen distance ladder:
+ *
+ *   p 0.09 -> 0.4 m     p 0.40 ->  4.5 m     p 0.80 -> 17.0 m
+ *   p 0.15 -> 0.9 m     p 0.50 ->  6.5 m     p 0.90 -> 22.5 m
+ *   p 0.22 -> 1.6 m     p 0.65 -> 11.0 m     p 1.00 -> 30.0 m
+ *   p 0.30 -> 2.8 m
+ *
+ * The shape follows Open-Golf's structure — flat at the bottom, steepening
+ * through the middle, steepest at the top — but the numbers are ours, because
+ * its speeds are in the units of its own custom integrator, not Rapier's.
+ *
+ * The first 30% of drag now buys 4.32 of 40.43 m/s, i.e. 10.7% of the launch
+ * speed, against the brief's "significantly less than 25-35%".
+ *
+ * Cutting the top from 84 to 40.4 m/s is NOT the global-force reduction the
+ * brief rules out: 40.4 m/s still carries the ball 30 m, which is 1.4x the
+ * longest straight shot the garden allows, leaving headroom for bank shots.
+ * What it removes is 35 m of overshoot that was never reachable terrain.
+ */
+const POWER_ANCHORS: [number, number][] = [
+  [0.0, 0.0],
+  [0.09, 0.67],
+  [0.15, 1.45],
+  [0.22, 2.52],
+  [0.3, 4.32],
+  [0.4, 6.81],
+  [0.5, 9.66],
+  [0.65, 15.87],
+  [0.8, 23.84],
+  [0.9, 30.94],
+  [1.0, 40.43],
+]
+
+/** Input fraction 0..1 -> launch speed in m/s. */
+export function powerToSpeed(power: number): number {
+  const p = Math.min(Math.max(power, 0), 1)
+  for (let i = 1; i < POWER_ANCHORS.length; i++) {
+    const [p1, v1] = POWER_ANCHORS[i]
+    if (p <= p1) {
+      const [p0, v0] = POWER_ANCHORS[i - 1]
+      return v0 + ((p - p0) / (p1 - p0)) * (v1 - v0)
+    }
+  }
+  return POWER_ANCHORS[POWER_ANCHORS.length - 1][1]
+}
 
 
 
@@ -44,7 +100,10 @@ const MIN_DRAG_TO_SHOOT = 0.05
  * what actually happens.
  */
 function computeShot(dragVector: Vector2, camera: Camera) {
-  const dragDistance = Math.min(dragVector.length() * 5, MAX_DRAG_DISTANCE)
+  // `power` is the input fraction, 0..1. Everything downstream — the impulse,
+  // the ribbon length and the ribbon colour — is derived from this one number,
+  // so the indicator can never disagree with the shot.
+  const power = Math.min(dragVector.length() / DRAG_FOR_FULL_POWER, 1)
 
   // Convert the 2D screen drag into a 3D ground-plane direction using the
   // camera's forward/right vectors, so "drag left" always means "shoot
@@ -62,7 +121,7 @@ function computeShot(dragVector: Vector2, camera: Camera) {
     // Shooting is opposite the drag (like pulling back a slingshot).
     .multiplyScalar(-1)
 
-  return { direction, dragDistance }
+  return { direction, power }
 }
 
 // The green/yellow/red power ramp moved to AimIndicator.tsx, which now uses
@@ -145,15 +204,11 @@ export function Ball({
         aimRef.current?.hide()
         return
       }
-      const { direction, dragDistance } = computeShot(dragVector, camera)
+      const { direction, power } = computeShot(dragVector, camera)
       const body = bodyRef.current
       if (!body) return
       const t = body.translation()
-      aimRef.current?.update(
-        new Vector3(t.x, t.y, t.z),
-        direction,
-        Math.min(dragDistance / MAX_DRAG_DISTANCE, 1),
-      )
+      aimRef.current?.update(new Vector3(t.x, t.y, t.z), direction, power)
     }
 
     function handlePointerDown(event: React.PointerEvent) {
@@ -182,10 +237,13 @@ export function Ball({
       if (!body) return
 
       const dragVector = new Vector2().subVectors(dragCurrent.current, dragStart.current)
-      const { direction: shotDirection, dragDistance } = computeShot(dragVector, camera)
-      if (dragDistance < MIN_DRAG_TO_SHOOT) return // treat as a click, not a shot
+      const { direction: shotDirection, power } = computeShot(dragVector, camera)
+      if (dragVector.length() < MIN_DRAG_TO_SHOOT) return // a click, not a shot
 
-      const impulseMagnitude = dragDistance * IMPULSE_SCALE
+      // The curve is expressed in LAUNCH SPEED, so convert with the body's own
+      // mass rather than a hard-coded impulse scale. If the collider ever
+      // changes size the curve still means exactly what it says.
+      const impulseMagnitude = powerToSpeed(power) * body.mass()
       body.applyImpulse(
         { x: shotDirection.x * impulseMagnitude, y: 0, z: shotDirection.z * impulseMagnitude },
         true,
