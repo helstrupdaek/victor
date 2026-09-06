@@ -6,12 +6,20 @@ import { createCheckerTexture } from './checkerTexture'
 import { applyHouseMaterials } from './houseMaterials'
 
 // Course modeled on the real party garden's actual shape: "the whole garden
-// is the golf hole", not a fixed-width lane placed inside it. The tee sits
-// in a narrow strip by the carport/driveway; past the house the lawn opens
-// dramatically into one broad open area, flaring wider again in a rounded
-// corner near the hole and apple tree. The house (its own solid RigidBody)
-// is the inner boundary along one side for most of the course — no extra
-// wall needed there, the ball already bounces off the house.
+// is the golf hole", not a fixed-width lane placed inside it. The playable
+// surface is ONE continuous residential back lawn — the ball tees off on the
+// block-paved drive apron that wraps around the house's carport gable, rolls
+// straight off the paving onto the grass, and plays the length of the garden
+// to the cup by the apple tree, where the lawn steps wider past the end of the
+// building. The house (its own solid RigidBody) is the inner boundary along
+// one side for most of the course — no extra wall needed there, the ball
+// already bounces off the house.
+//
+// There is no internal boundary anywhere inside the lawn. What used to look
+// like a narrow tee corridor was a wall (R1) and a cap (RIGHT_CONNECTOR)
+// sealing 23m2 of unreachable grass; both are gone, and the start now gets its
+// identity from its SURFACE — paving vs. grass — the way it does on the real
+// plot, rather than from a hedge boxing it in.
 //
 // VISUALS vs. COLLIDERS: every collider below is authoritative and unchanged.
 // What the player *sees* for the boundary, house, carport, terrace, hedges,
@@ -22,18 +30,17 @@ import { applyHouseMaterials } from './houseMaterials'
 // collider exactly (e.g. the house model is ~4.7m deep while its collider is
 // 2.9m thick, and the boundary hedge is 0.95m tall while its collider is 4m) —
 // only the fairway-facing faces are kept flush, so bounces still look right.
-// Two colliders deliberately have a SOFTER visual than they used to: R1 and
-// RIGHT_CONNECTOR were drawn as bright grey stone curbs, which together with
-// curb_L1 boxed the tee into an obvious three-sided white track. They are now
-// drawn as a low clipped box hedge (a drive-side border), and the two purely
-// decorative curbs that ran through live lawn with no collider behind them
-// (curb_mid, curb_flare) are gone entirely.
+// The two purely decorative curbs that ran through live lawn with no collider
+// behind them (curb_mid, curb_flare) are gone entirely, as are R1 and
+// RIGHT_CONNECTOR and the low border hedges that used to draw them — see the
+// long note above RIGHT_WALLS. Every remaining collider corresponds to a real
+// property feature, and every visible solid the ball can reach has a collider.
 const WALL_HEIGHT = 2
 const WALL_THICKNESS = 0.4
 
 export const TEE_POSITION: [number, number, number] = [1, 0.2, -10]
 // Hole sits OUT IN THE OPEN LAWN at the far end, not against the house.
-// It used to be at X = -3.5, which is exactly HOUSE_LEFT_X — i.e. flush with
+// It used to be at X = -3.5, i.e. exactly flush with
 // the house's own fairway-facing wall plane — so the cup read as if it had
 // been cut into the terrace right at the building's foot. The property
 // reference (House/top-down image.png, "Hole (apple tree)") puts the hole
@@ -62,7 +69,9 @@ export const HOLE_POSITION: [number, number, number] = [0.5, 0.05, 10.8]
 // inside the building; nothing about the fairway-facing plane at -3.5 moved.
 const HOUSE_POSITION: [number, number, number] = [-4.95, 0.75, 1]
 const HOUSE_SIZE: [number, number, number] = [2.9, 1.5, 14]
-const HOUSE_LEFT_X = -3.5 // house's fairway-facing face
+// The building's fairway-facing wall plane, X = -3.5, is HOUSE_POSITION[0] +
+// HOUSE_SIZE[0]/2 and is mirrored in build_environment.py as BUILD_FACE_X.
+// It is no longer a collider plane in its own right — see HOUSE_WALL_PLANE_X.
 // Playtesting a hard, close-range shot against the house's own auto-cuboid
 // collider found a real (if rare) tunneling case — a ball resting right up
 // against the house, then hit again, punched through to X ≈ -7.8 and fell
@@ -72,7 +81,26 @@ const HOUSE_LEFT_X = -3.5 // house's fairway-facing face
 // CuboidCollider treatment as every other boundary wall below (invisible —
 // the house mesh already reads as the wall, this is collision-only
 // defense in depth) rather than trusting the auto collider alone.
-const HOUSE_REINFORCEMENT = { x: HOUSE_LEFT_X, z: 1, halfX: WALL_THICKNESS, halfZ: 7.3 }
+// Centre-line of BOTH house-side colliders (L1 and HOUSE_REINFORCEMENT).
+// They used to sit on HOUSE_LEFT_X (-3.5), which put their fairway faces at
+// X = -3.1 — 0.4 short of the house wall plane. The top-down diagnostic
+// flagged that as ~8.4m2 of visible lawn the ball can never touch.
+//
+// The diagnostic slightly overstated it. What the ball should actually stop
+// against along this frontage is not the wall plane but the STONE KERB that
+// runs along it for nearly its whole length (`curb_L1` for Z -12.65..-5.7,
+// `house_kerb` for Z -6.2..4.8 and 8.0..8.2 in build_environment.py): a
+// 0.36m-wide, 0.42m-tall block kerb centred on -3.5, so its fairway face is
+// at X = -3.32, already 0.18 proud of the wall. The genuinely reclaimable
+// figure is therefore 0.18m over the frontage, ~3.8m2 — not 0.4m/8.4m2.
+//
+// -3.72 puts the collider's fairway face exactly on -3.32, flush with that
+// kerb, so the ball now visibly bounces off the thing it looks like it is
+// bouncing off. Tunneling protection is UNCHANGED: the slab is the same
+// 0.8-thick cuboid, only translated 0.22 west, and at -4.12..-3.32 it is
+// still buried entirely inside the house apron / building volume.
+const HOUSE_WALL_PLANE_X = -3.72
+const HOUSE_REINFORCEMENT = { x: HOUSE_WALL_PLANE_X, z: 1, halfX: WALL_THICKNESS, halfZ: 7.3 }
 
 // --- Boundary shape -------------------------------------------------------
 // The playable outline is built from independent wall segments at
@@ -83,17 +111,20 @@ const HOUSE_REINFORCEMENT = { x: HOUSE_LEFT_X, z: 1, halfX: WALL_THICKNESS, half
 // there is never a gap a fast, CCD-enabled shot could find.
 //
 //              Z: -13        -6            8         13
-//  X:  -6 |                          L2 (hole flare) ======|
-//  X:-3.5 | L1 (tee, flush) ===== [ HOUSE ] ======|
-//  X: 2.2 | R1 (tee narrow) =|         (ends Z -8.0)
-//  X:11.5 |            R2 (single wall, full length) =================|
+//  X:   -6 |                         L2 (hole flare) ======|
+//  X:-3.72 | L1 (kerb-flush) ===== [ HOUSE ] ======|
+//  X: 11.5 |           R2 (single wall, full length) =================|
 //
-// R1 (the tee-zone narrowing wall) and R2 (the permanent outer wall) leave
-// a rectangular pocket behind R1 (X 2.2..11.5, Z < -9.5). RIGHT_CONNECTOR
-// seals the top of that pocket; R1 seals its left edge; R2 seals its right
-// edge; CAP_TEE seals its bottom. The pocket is therefore fully enclosed and
-// unreachable by the ball — not "probably fine", but physically walled off
-// on all four sides.
+// Four segments and two end caps, and every one of them is the PROPERTY
+// BOUNDARY or the building. There are no internal walls: the lawn inside is
+// one continuous surface, exactly as it is on the real plot. L1 and the house
+// are the north side; R2 is the far hedge; CAP_TEE and CAP_HOLE are the two
+// end hedges; L2 is the step in the boundary where the garden continues past
+// the end of the building toward the apple tree.
+//
+// The clear play region is therefore ONE rectangle, X -3.32..11.1 by
+// Z -12.25..8.3 (14.42 x 20.55m), plus the flare beyond the house's end at
+// X -5.6..11.1 by Z 8.3..12.25. Nothing inside it is fenced off.
 //
 // WIDTH (changed deliberately, do not "restore" it): R2 sat at X = 7 for
 // every earlier pass, which made the playable yard a 10.5 x 26m corridor —
@@ -113,7 +144,7 @@ type WallSpec = { x: number; z: number; halfX: number; halfZ: number }
 const LEFT_WALLS: WallSpec[] = [
   // L1 — tee zone, flush with the house's own face so there's no seam at
   // all where it meets the house (same X, overlapping Z ranges).
-  { x: HOUSE_LEFT_X, z: -9.25, halfX: WALL_THICKNESS, halfZ: 3.55 }, // spans Z -12.8..-5.7
+  { x: HOUSE_WALL_PLANE_X, z: -9.25, halfX: WALL_THICKNESS, halfZ: 3.55 }, // spans X -4.12..-3.32, Z -12.8..-5.7
   // L2 — hole zone, flares outward for the wider/rounded far corner.
   { x: -6, z: 10.25, halfX: WALL_THICKNESS, halfZ: 2.55 }, // spans Z 7.7..12.8
 ]
@@ -123,35 +154,60 @@ const RIGHT_WALLS: WallSpec[] = [
   // is a supplementary inner wall that only narrows the tee end; R2 alone
   // already bounds the whole right side, so there's no gap once R1 ends.
   { x: 11.5, z: 0, halfX: WALL_THICKNESS, halfZ: 12.6 }, // spans X 11.1..11.9, Z -12.6..12.6
-  // R1 — tee-zone narrowing wall, sits inside R2 near the tee. Shortened
-  // Z -12.8..-6.0 -> -12.8..-8.0 in the widening pass: with R2 out at 11.5
-  // the sealed pocket behind R1 had grown to 9.3 x 6.5m of unreachable lawn
-  // sitting right in the game camera's foreground, and it read as a second,
-  // separate hedged garden room. Ending R1 (and its connector) 4m earlier
-  // hands 34m2 of that back to the playable lawn and leaves the pocket as a
-  // 9.3 x 2.75m strip along the tee — i.e. a planting border beside the
-  // drive, which is what it looks like.
-  { x: 2.2, z: -10.4, halfX: WALL_THICKNESS, halfZ: 2.4 }, // spans Z -12.8..-8.0
 ]
 
-// X-running connector that seals the top of the pocket between R1 and R2
-// (see diagram above) — without it a ball could drift sideways behind R1
-// once past its end instead of bouncing off it.
-// Moved with R1 (Z -6.1 -> -9.0): it must stay inside R1's Z span so the two
-// still overlap at their corner. R1 now runs to Z -8.0, this spans -9.5..-8.5,
-// so R1 covers it and then continues 0.5 further north — same overlap
-// convention as every other seam here.
-const RIGHT_CONNECTOR: WallSpec = { x: 6.85, z: -9.0, halfX: 4.65, halfZ: 0.5 } // X 2.2..11.5, Z -9.5..-8.5
+// DELETED: R1 and RIGHT_CONNECTOR — the course's only internal subdivision.
+//
+// R1 was a wall at X 2.2 running Z -12.8..-8.0; RIGHT_CONNECTOR ran X 2.2..11.5
+// at Z -9.0 and capped it. Together with R2 and CAP_TEE they sealed an
+// 8.5 x 2.75m (23.4m2) pocket of lawn, walled on all four sides, that the ball
+// could not reach by any route. 18.6m2 of it was plain mown fairway — the same
+// mesh, the same green, the same checker as the playing surface — fenced off
+// behind a 0.45m box hedge.
+//
+// That hedge was the only internal division anywhere in the scene, and the
+// top-down orthographic diagnostic identified it as the single strongest
+// "this is a built minigolf course, not a garden" signal in the plan: a real
+// lawn is one surface, a course is lawn divided into cells. None of the 23
+// photographs of the real property, nor the aerial in House/top-down image.png,
+// shows any internal division in the lawn at all — it is one continuous
+// surface from the drive apron all the way to the far hedge.
+//
+// R1 is deleted rather than kept as a free-standing border because nothing at
+// that line exists on the real plot. The aerial's east end runs paved drive
+// straight into open lawn; what narrows the start there is the house gable on
+// one side and the property's own boundary hedge on the other, not a divider
+// out in the grass. Keeping R1 purely because it was convenient containment
+// would have been reintroducing an artificial internal wall by another name.
+//
+// Containment does not need it. R2 spans the full course length (Z -12.6..12.6)
+// and CAP_TEE now spans X -4.0..11.5, so the tee end is bounded by the property
+// boundary alone — see the seam audit in the geometry-correction report.
+//
+// Playable area 322.6 -> 358.0m2; sealed unreachable lawn 23.4 -> 0m2; internal
+// hedges dividing lawn from lawn 1 -> 0. The visual counterparts (`border_R1`,
+// `border_connector` in build_environment.py) are deleted with them, so no
+// hedge is left standing without a collider behind it.
 
 // End caps (thin in Z, long in X) closing the tee and hole ends. Each is
 // sized to span every wall segment active at that end (including the R1/R2
 // pocket at the tee end) so nothing peeks past the corners. Both now run out
 // to R2's new X = 11.5 centre-line, i.e. 0.4 into R2's own body, exactly the
 // overlap convention they had at the old X = 7.
-const CAP_TEE: WallSpec = { x: 4.0, z: -12.65, halfX: 7.5, halfZ: WALL_THICKNESS } // X -3.5..11.5
+// CAP_TEE's west end moved -3.5 -> -4.0 with L1: L1's body is now X -4.12..-3.32,
+// so a cap ending at -3.5 would have overlapped it by only 0.18, under this
+// file's 0.2-0.6 minimum. At -4.0 the overlap is 0.68.
+const CAP_TEE: WallSpec = { x: 3.75, z: -12.65, halfX: 7.75, halfZ: WALL_THICKNESS } // X -4.0..11.5
 const CAP_HOLE: WallSpec = { x: 2.75, z: 12.65, halfX: 8.75, halfZ: WALL_THICKNESS } // X -6..11.5
 
-const ALL_WALLS: WallSpec[] = [...LEFT_WALLS, ...RIGHT_WALLS, RIGHT_CONNECTOR, CAP_TEE, CAP_HOLE]
+const ALL_WALLS: WallSpec[] = [...LEFT_WALLS, ...RIGHT_WALLS, CAP_TEE, CAP_HOLE]
+
+// Kerbed planting bed tucked into the boundary corner at the tee end, where
+// R2's hedge meets CAP_TEE's. Hugs both collider faces (R2 at X 11.1, CAP_TEE
+// at Z -12.25), so it takes its area out of the corner of the lawn rather than
+// out of the middle of it, and sits ~10m off the tee-to-hole line.
+// build_environment.py draws it with flower_bed() at exactly these bounds.
+const BED_CORNER = { x: 10.25, z: -11.32, halfX: 0.85, halfZ: 0.93 } // X 9.4..11.1, Z -12.25..-10.39
 
 // Floor sized to comfortably cover the full flared footprint above.
 // X -6.5..12.0 (L2's outer face is -6.4, R2's outer face 11.9), Z -13.5..13.5.
@@ -193,6 +249,19 @@ const MOWER_SIZE: [number, number, number] = [0.3, 0.2, 0.4]
 // Planter/flower baskets — warm/earthy tones, decorative only.
 const PLANTER_BOX_POSITION: [number, number, number] = [-2.9, 0.25, 7.0]
 const PLANTER_BASKET_POSITION: [number, number, number] = [-2.5, 0.2, -9]
+// The START signpost. Hoisted out of GardenScenery into a named constant so
+// its collider (added below) and its model can never drift apart.
+const START_SIGN_POSITION: [number, number, number] = [-3.0, 0, -9.6]
+// The HOLE signpost, the apple tree and the flagstick DELIBERATELY stay
+// collider-free, and this is a knowing exception to "every visible solid the
+// ball can reach has a collider". All three stand within ~1.7m of the cup, on
+// the approach to it. Colliding them would make the final putt materially
+// harder, which is explicitly ruled out for decorative detailing. The lie is
+// confined to three thin objects clustered at the destination; everywhere else
+// on the course, what looks solid is solid. Flagged for the owner rather than
+// resolved unilaterally, since either fix (collide them, or move them off the
+// approach) changes composition that is already locked.
+const HOLE_SIGN_POSITION: [number, number, number] = [-0.9, 0, 11.7]
 
 // Sand-trap decorative patches — flat tan circles, no special physics.
 const SAND_TRAPS: { position: [number, number, number]; radius: number }[] = [
@@ -303,8 +372,8 @@ function GardenScenery() {
           mirrored. A modelled sign has no "mirrored glyph" failure mode:
           the text is real geometry, oriented in the export by an explicit
           right/up/normal basis with determinant +1. */}
-      <GltfProp url="sign_start.glb" position={[-3.0, 0, -9.6]} />
-      <GltfProp url="sign_hole.glb" position={[-0.9, 0, 11.7]} />
+      <GltfProp url="sign_start.glb" position={START_SIGN_POSITION} />
+      <GltfProp url="sign_hole.glb" position={HOLE_SIGN_POSITION} />
 
       {/* Open-Golf flagstick in the cup (decorative — the hole sensor
           below is what actually detects the ball). */}
@@ -351,6 +420,45 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
         {ALL_WALLS.map((w, i) => (
           <CuboidCollider key={i} args={[w.halfX, WALL_HEIGHT, w.halfZ]} position={[w.x, WALL_HEIGHT / 2, w.z]} />
         ))}
+        {/* Kerbed corner planting bed, in the angle where the far hedge (R2)
+            meets the tee-end hedge (CAP_TEE). This is the ONE piece of built
+            structure inside the reclaimed area, and it gets a collider on
+            purpose: a bed with a 0.22m stone kerb and shrubs on it is a
+            structural edge, not vegetation, and a visible kerb the ball rolls
+            through is the exact defect this project already removed twice
+            (curb_mid, curb_flare). The collider is deliberately taller than
+            the kerb so a fast ball cannot pop over and come to rest inside the
+            planting; from outside it reads as the bed's mass, which with the
+            shrubs on it stands ~0.8 tall anyway.
+
+            Its two predecessors — free-standing beds at X 3.1-4.3 and 6.6-7.8,
+            which used to be dressing inside the sealed pocket — are gone
+            rather than collidered. Out in reclaimed open lawn they would have
+            been two boxy islands in the middle of the grass: obstacles the
+            course does not want, and a "designed cell" read the aerial does
+            not support. The aerial puts planting in the boundary corners, not
+            adrift in the lawn. */}
+        <CuboidCollider args={[BED_CORNER.halfX, 0.25, BED_CORNER.halfZ]} position={[BED_CORNER.x, 0.25, BED_CORNER.z]} />
+
+        {/* Three props that stand ON live playing surface and had no
+            colliders at all, found by the "what can the ball reach" audit.
+            None of them is new — they predate this change — but a glazed pot
+            and a signpost are structure, not vegetation, and the ball used to
+            roll straight through both. All three sit in the start area, well
+            off the tee-to-hole line, so colliding them costs no shot the
+            course needs.
+
+            The planters get BOX colliders even though the pots are round.
+            A sphere is the better shape fit, and it was tried first — but a
+            small sphere is exactly the geometry that deflects a fast ball
+            UPWARDS, and the revalidation battery caught it immediately:
+            spherical pots reproduced the known bush-launch defect and put two
+            extra bearings over the 3m boundary wall. A box presents vertical
+            faces, so it bounces horizontally at every speed. Slightly wrong
+            silhouette, materially safer containment. */}
+        <CuboidCollider args={[0.26, 0.3, 0.26]} position={[PLANTER_BASKET_POSITION[0], 0.3, PLANTER_BASKET_POSITION[2]]} />
+        <CuboidCollider args={[0.28, 0.32, 0.28]} position={[PLANTER_BOX_POSITION[0], 0.32, PLANTER_BOX_POSITION[2]]} />
+        <CuboidCollider args={[0.09, 0.55, 0.09]} position={[START_SIGN_POSITION[0], 0.55, START_SIGN_POSITION[2]]} />
       </RigidBody>
 
       {/* Sand-trap decorative patches — flat tan circles, no special physics */}
