@@ -129,7 +129,15 @@ export interface MinigolfScore {
   id: string
   created_at: string
   updated_at: string
-  guest_email: string
+  /** The typed player name — the leaderboard's identity and unique key. */
+  player_name: string
+  /**
+   * Nullable since migration 0005. Scores used to be keyed on the guest's
+   * email; they are now keyed on a free-text name, and rows written by the
+   * game carry no email at all. Kept so pre-migration rows retain their
+   * provenance rather than being rewritten.
+   */
+  guest_email: string | null
   shots: number
   seconds: number
   score: number
