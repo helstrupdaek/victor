@@ -1,14 +1,14 @@
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient'
 import type { MinigolfScore } from '@/types'
 
-const EMAIL_STORAGE_KEY = 'minigolf_email'
+const NAME_STORAGE_KEY = 'minigolf_player_name'
 
-export function getStoredMinigolfEmail(): string | null {
-  return localStorage.getItem(EMAIL_STORAGE_KEY)
+export function getStoredMinigolfName(): string | null {
+  return localStorage.getItem(NAME_STORAGE_KEY)
 }
 
-export function storeMinigolfEmail(email: string): void {
-  localStorage.setItem(EMAIL_STORAGE_KEY, email)
+export function storeMinigolfName(name: string): void {
+  localStorage.setItem(NAME_STORAGE_KEY, name)
 }
 
 export interface MinigolfLeaderboardEntry {
@@ -19,14 +19,14 @@ export interface MinigolfLeaderboardEntry {
 }
 
 export async function submitMinigolfScore(
-  email: string,
+  name: string,
   shots: number,
   seconds: number,
 ): Promise<{ ok: boolean; error?: string }> {
   const response = await fetch('/api/minigolf/submit-score', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, shots, seconds }),
+    body: JSON.stringify({ name, shots, seconds }),
   })
   return (await response.json()) as { ok: boolean; error?: string }
 }

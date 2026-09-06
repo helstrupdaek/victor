@@ -13,7 +13,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('minigolf_scores')
-    .select('guest_email, shots, seconds, score')
+    .select('player_name, shots, seconds, score')
     .order('score', { ascending: true })
     .limit(LEADERBOARD_LIMIT)
 
@@ -23,7 +23,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   const entries = (data ?? []).map((row) => ({
-    display_name: row.guest_email.split('@')[0],
+    display_name: row.player_name,
     shots: row.shots,
     seconds: row.seconds,
     score: row.score,

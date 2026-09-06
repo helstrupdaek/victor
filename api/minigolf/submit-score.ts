@@ -3,10 +3,13 @@ import { readJsonBody, sendJson } from '../_lib/http.js'
 import { getSupabaseAdmin } from '../_lib/supabaseAdmin.js'
 
 interface SubmitScoreBody {
-  email?: string
+  /** Free-text player name. Identity is a name now, not a guest lookup. */
+  name?: string
   shots?: number
   seconds?: number
 }
+
+const MAX_NAME_LENGTH = 24
 
 const MIN_SHOTS = 1
 const MAX_SHOTS = 50
@@ -20,12 +23,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   const body = await readJsonBody<SubmitScoreBody>(req)
-  const email = body.email?.trim().toLowerCase()
+  // Collapse internal whitespace so " A   B " and "A B" are the same player,
+  // and strip control characters so a name cannot smuggle markup onto the board.
+  const name = body.name?.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim()
   const shots = body.shots
   const seconds = body.seconds
 
-  if (!email) {
-    sendJson(res, 400, { ok: false, error: 'Email mangler.' })
+  if (!name) {
+    sendJson(res, 400, { ok: false, error: 'Skriv dit navn.' })
+    return
+  }
+  if (name.length > MAX_NAME_LENGTH) {
+    sendJson(res, 400, { ok: false, error: `Navnet må højst være ${MAX_NAME_LENGTH} tegn.` })
     return
   }
   if (
@@ -44,29 +53,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   const supabase = getSupabaseAdmin()
 
-  const { data: guest, error: guestError } = await supabase
-    .from('guests')
-    .select('email')
-    .eq('email', email)
-    .maybeSingle()
-  if (guestError) {
-    sendJson(res, 500, { ok: false, error: guestError.message })
-    return
-  }
-  if (!guest) {
-    sendJson(res, 404, {
-      ok: false,
-      error: 'Vi kunne ikke finde en tilmelding med denne email. Brug den email I tilmeldte jer med.',
-    })
-    return
-  }
-
   const score = shots * 10 + seconds
 
   const { data: existing, error: existingError } = await supabase
     .from('minigolf_scores')
     .select('score')
-    .eq('guest_email', email)
+    .ilike('player_name', name)
     .maybeSingle()
   if (existingError) {
     sendJson(res, 500, { ok: false, error: existingError.message })
@@ -81,8 +73,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const { error: upsertError } = await supabase
     .from('minigolf_scores')
     .upsert(
-      { guest_email: email, shots, seconds, score, updated_at: new Date().toISOString() },
-      { onConflict: 'guest_email' },
+      { player_name: name, shots, seconds, score, updated_at: new Date().toISOString() },
+      { onConflict: 'player_name' },
     )
   if (upsertError) {
     sendJson(res, 500, { ok: false, error: upsertError.message })

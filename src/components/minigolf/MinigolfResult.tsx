@@ -1,22 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   fetchMinigolfLeaderboard,
-  getStoredMinigolfEmail,
-  storeMinigolfEmail,
+  getStoredMinigolfName,
+  storeMinigolfName,
   submitMinigolfScore,
   type MinigolfLeaderboardEntry,
 } from '@/lib/api/minigolf'
 
 /**
  * The panel that appears when the ball drops into the cup: the result, a place
- * to identify yourself, and the leaderboard.
+ * to put your name, and the leaderboard.
  *
- * IDENTITY IS THE GUEST'S EMAIL, not a free-text name, and that is deliberate.
- * api/minigolf/submit-score.ts looks the address up in the `guests` table and
- * rejects anything that is not on it, and the leaderboard's `display_name`
- * comes from that guest record. A free-text name box would bypass the guest
- * check and let anyone post under any name — including someone else's. So the
- * player types their email and their real name appears on the board.
+ * Identity is a free-text name. This started out keyed on the guest email so
+ * the board could only be posted to by invited guests, but at a party the game
+ * gets handed around — siblings, friends, whoever picks up the phone — and
+ * making them remember which address the invitation went to is the wrong ask.
+ * The name is capped and stripped of control characters server-side, and one
+ * best round is kept per name.
  */
 export function MinigolfResult({
   shots,
@@ -27,7 +27,7 @@ export function MinigolfResult({
   seconds: number
   onPlayAgain: () => void
 }) {
-  const [email, setEmail] = useState(() => getStoredMinigolfEmail() ?? '')
+  const [name, setName] = useState(() => getStoredMinigolfName() ?? '')
   const [status, setStatus] = useState<'idle' | 'sending' | 'done'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [entries, setEntries] = useState<MinigolfLeaderboardEntry[] | null>(null)
@@ -39,9 +39,9 @@ export function MinigolfResult({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    const trimmed = email.trim().toLowerCase()
+    const trimmed = name.replace(/\s+/g, ' ').trim()
     if (!trimmed) {
-      setError('Skriv din e-mail, så vi ved hvem du er.')
+      setError('Skriv dit navn, så vi ved hvem du er.')
       return
     }
     setStatus('sending')
@@ -53,7 +53,7 @@ export function MinigolfResult({
         setStatus('idle')
         return
       }
-      storeMinigolfEmail(trimmed)
+      storeMinigolfName(trimmed)
       setEntries(await fetchMinigolfLeaderboard())
       setStatus('done')
     } catch {
@@ -74,21 +74,20 @@ export function MinigolfResult({
 
         {status !== 'done' ? (
           <form onSubmit={handleSubmit} className="mt-5">
-            <label htmlFor="mg-email" className="block text-sm font-medium text-ink-900">
-              Din e-mail
+            <label htmlFor="mg-name" className="block text-sm font-medium text-ink-900">
+              Dit navn
             </label>
-            <p className="mt-1 text-xs text-ink-600">
-              Den samme som på invitationen — så kommer dit navn på listen.
-            </p>
+            <p className="mt-1 text-xs text-ink-600">Så kommer du på listen.</p>
             <input
               ref={inputRef}
-              id="mg-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="mg-name"
+              type="text"
+              maxLength={24}
+              autoComplete="given-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               className="mt-2 w-full rounded-lg border border-ink-900/15 bg-white px-3 py-2 text-ink-900 outline-none focus:border-ink-900/40"
-              placeholder="navn@eksempel.dk"
+              placeholder="Victor"
             />
             {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
             <div className="mt-4 flex gap-2">
@@ -113,7 +112,7 @@ export function MinigolfResult({
             <p className="text-sm font-medium text-ink-900">Bedste runder</p>
             <ol className="mt-2 divide-y divide-ink-900/10">
               {(entries ?? []).map((entry, i) => {
-                const isYou = entry.shots === shots && Math.abs(entry.seconds - seconds) < 1.5
+                const isYou = entry.display_name.toLowerCase() === name.trim().toLowerCase()
                 return (
                   <li
                     key={`${entry.display_name}-${i}`}
