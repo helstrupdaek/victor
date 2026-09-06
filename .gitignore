@@ -30,3 +30,11 @@ public/videos/*_old*.mp4
 *.njsproj
 *.sln
 *.sw?
+Open-Golf-master/
+Open-Golf-poc/
+emsdk/
+
+# Local reference photography of the real property (183MB of originals).
+# Spatial/art-direction authority for the minigolf garden, but far too large
+# to ship in a deployed repo — keep on disk, not in git.
+House/
