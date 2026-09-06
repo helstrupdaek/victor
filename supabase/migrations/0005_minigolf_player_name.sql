@@ -69,3 +69,33 @@ create unique index if not exists minigolf_scores_player_name_key
 -- Bust PostgREST's schema cache so the API sees the new column immediately
 -- instead of after its next reload.
 notify pgrst, 'reload schema';
+
+-- SELF-VERIFICATION. This has now been reported as "the SQL ran" three times
+-- while the column was still absent from the database, because the editor runs
+-- the file as ONE transaction: any error anywhere rolls back everything above
+-- and the success message refers only to the batch, not to the outcome.
+--
+-- So the migration ends by reporting its own result. A successful run prints
+--
+--   has_player_name | guest_email_nullable | name_unique_index
+--   ----------------+----------------------+------------------
+--   t               | YES                  | t
+--
+-- Anything else — or a red error instead of a table — means it rolled back and
+-- nothing was applied.
+select
+  exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'minigolf_scores'
+      and column_name = 'player_name'
+  ) as has_player_name,
+  (
+    select is_nullable from information_schema.columns
+    where table_schema = 'public' and table_name = 'minigolf_scores'
+      and column_name = 'guest_email'
+  ) as guest_email_nullable,
+  exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'minigolf_scores'
+      and indexname = 'minigolf_scores_player_name_key'
+  ) as name_unique_index;

@@ -2,6 +2,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows } from '@react-three/drei'
 import { GameCamera } from './GameCamera'
 import { ballState } from './ballState'
+import { victorState } from './victorState'
 import { BannerPlane } from './BannerPlane'
 import { Physics } from '@react-three/rapier'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -277,7 +278,11 @@ export default function MinigolfCanvas({
             // ballState rides along so headless validation can project the
             // ball to screen space and dispatch real pointer gestures at it —
             // which is how this phase finally played actual shots in a test.
-            ;(window as unknown as Record<string, unknown>).__minigolf = { gl, scene, camera, ballState }
+            // Merged, not assigned: <Victor> installs its own `victor` handle
+            // on the same object, and which of the two mounts first is not
+            // something this file should depend on.
+            const w = window as unknown as Record<string, Record<string, unknown>>
+            w.__minigolf = { ...(w.__minigolf ?? {}), gl, scene, camera, ballState, victorState }
             // DEV-ONLY camera override, e.g. /minigolf?cam=9,26,-11. It exists
             // so the phase's acceptance captures are reproducible from a
             // headless browser instead of hand-driven orbit gestures that pass

@@ -1,8 +1,10 @@
 import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier'
 import { RoundedBox, useGLTF } from '@react-three/drei'
-import { Suspense, useMemo } from 'react'
+import { Suspense, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { BackSide, Path, Shape, ShapeGeometry } from 'three'
 import type { Group, Mesh } from 'three'
+import { ballState } from './ballState'
 import { createCheckerTexture } from './checkerTexture'
 import { Victor } from './Victor'
 import { applyHouseMaterials } from './houseMaterials'
@@ -328,7 +330,28 @@ const FLOOR_SLABS: { x: number; z: number; halfX: number; halfZ: number }[] = ((
 // Round clipped bush — sits just off the direct tee-to-hole line in the
 // main lawn, so the player can cut tight past it on the house side for a
 // shorter look at the hole, or play safe around its outer (wall) side.
-const BUSH_POSITION: [number, number, number] = [1.5, 0.6, 1]
+/**
+ * The large bush — the course's one real guard, moved 0.76 m west onto the
+ * tee-to-cup line so that it actually guards.
+ *
+ * It was at X = 1.5, which put its centre 0.76 m off that line and its surface
+ * just barely on it. That is not a guard: a hole-in-one needs one straight
+ * segment from tee to cup, the player has 0.5 m of latitude at the far end
+ * because of Ball.tsx's hole assist, and the bush shadowed only one side of the
+ * resulting 2.75-degree window. A 1.45-degree gap ran down the left — aim a
+ * whisker left of the bush and the ball rolled 20 m to the cup untouched, which
+ * is exactly the easy ace this is meant to prevent.
+ *
+ * On the line, the cup is fully in its shadow: every straight shot that would
+ * reach the assist disc goes through the bush, and clearing it takes 2.5
+ * degrees of deliberate aiming error, which points well wide of the cup. An ace
+ * now has to come off a cushion.
+ *
+ * It does NOT close the hole down. The bush is 1.2 m across in a lawn 14 m
+ * wide, so playing left or right of it and putting from the green is the
+ * obvious line — the choice it was always described as creating, now real.
+ */
+const BUSH_POSITION: [number, number, number] = [0.74, 0.6, 1]
 const BUSH_RADIUS = 0.6
 // Decorative apple tree beside the hole — purely visual, no collider, so it
 // doesn't make the final putt unfairly harder. It sits BEYOND and to one side
@@ -517,7 +540,47 @@ function GardenScenery() {
 useGLTF.preload(MODEL_BASE + 'garden.glb')
 useGLTF.preload(MODEL_BASE + 'victor.glb')
 
+/**
+ * Fastest horizontal speed at which the cup can still catch the ball, m/s.
+ *
+ * Derived, not picked. To be caught, the ball has to fall far enough to get
+ * below the rim while it is crossing the mouth of the cup: the opening is
+ * 2 x HOLE_RADIUS = 0.66 m across, and it must drop its own radius, 0.15 m,
+ * which under gravity takes sqrt(2 x 0.15 / 9.81) = 0.175 s. Crossing 0.66 m in
+ * 0.175 s is 3.8 m/s, so anything quicker than that is physically travelling
+ * too fast to drop in and should skip the hole. Rounded down to 3.6 for a
+ * little margin.
+ *
+ * For scale: the power curve tops out at 40.4 m/s, and a shot judged to reach
+ * the cup arrives at nearly zero. This only rejects balls that are genuinely
+ * screaming across the green.
+ */
+const CAPTURE_SPEED = 3.6
+
 export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
+  /**
+   * Whether the ball is currently inside the cup's sensor volume.
+   *
+   * The sensor alone is not the hole-out test. Rapier reports an intersection
+   * from the swept path, so a ball crossing the mouth at 28.8 m/s — measured,
+   * in the physics battery — registered as holed even though it was over the
+   * cup for 23 milliseconds and never dropped into it.
+   *
+   * Tracking presence instead, and holing out only once the ball is BOTH inside
+   * and slow enough to be caught, gets both cases right: a ball that skims
+   * across enters and leaves without ever qualifying, and a ball that drops in
+   * and rattles around holes out as soon as it settles.
+   */
+  const inCup = useRef(false)
+  const holed = useRef(false)
+
+  useFrame(() => {
+    if (!inCup.current || holed.current) return
+    if (ballState.speed > CAPTURE_SPEED) return
+    holed.current = true
+    onHoleEnter()
+  })
+
   // Mown-stripe checker scale. This used to be `FLOOR_SIZE * 2` repeats of an
   // 8x8 checker, i.e. 28 x 54 tiles = 224 x 432 squares over a 14 x 27m lawn —
   // squares 6cm across. At the game camera that is not a checker at all, it is
@@ -690,9 +753,17 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
         <circleGeometry args={[HOLE_RADIUS, 28]} />
         <meshBasicMaterial color="#0d0e0c" />
       </mesh>
-      {/* Sensor sits INSIDE the cup now, below the turf line, so it reports a
-          ball that has actually dropped rather than one rolling over the top. */}
-      <RigidBody type="fixed" colliders={false} sensor onIntersectionEnter={onHoleEnter}>
+      {/* Sensor sits INSIDE the cup, below the turf line, so it reports a ball
+          that has actually dropped rather than one rolling over the top. It
+          reports PRESENCE only — see CAPTURE_SPEED above for why holing out is
+          decided in the frame loop rather than on the enter event. */}
+      <RigidBody
+        type="fixed"
+        colliders={false}
+        sensor
+        onIntersectionEnter={() => { inCup.current = true }}
+        onIntersectionExit={() => { inCup.current = false }}
+      >
         <CuboidCollider
           args={[HOLE_RADIUS, CUP_DEPTH / 2, HOLE_RADIUS]}
           position={[HOLE_POSITION[0], -CUP_DEPTH / 2, HOLE_POSITION[2]]}

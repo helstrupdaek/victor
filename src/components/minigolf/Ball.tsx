@@ -1,12 +1,14 @@
 import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { ballState } from './ballState'
+import { victorState } from './victorState'
 import { AimIndicator, type AimIndicatorHandle } from './AimIndicator'
 import {
   BufferGeometry,
   Float32BufferAttribute,
   type Group,
+  type Mesh,
   type Camera,
   Vector2,
   Vector3,
@@ -155,7 +157,6 @@ export function Ball({
 }) {
     const bodyRef = useRef<RapierRigidBody>(null)
     const { camera, gl } = useThree()
-    const [isDragging, setIsDragging] = useState(false)
     const dragStart = useRef(new Vector2())
     const dragCurrent = useRef(new Vector2())
 
@@ -169,6 +170,16 @@ export function Ball({
     // doesn't spin along with the ball's rolling rotation — only its
     // position is synced to the ball each frame, below.
     const ringGroupRef = useRef<Group>(null)
+
+    // --- Victor's Easter egg -----------------------------------------------
+    // The three things the steal sequence needs from the ball, and nothing
+    // else. Everything below is bookkeeping so that the ball can be lifted out
+    // of the simulation and put back WITHOUT an impulse, a stroke, or any
+    // change to how a shot behaves. See victorState.ts.
+    const meshRef = useRef<Mesh>(null)
+    /** True while this component has the body switched to kinematic. */
+    const heldNow = useRef(false)
+    const lastRespawn = useRef(victorState.respawnSerial)
 
     const ringGeometry = useMemo(() => {
       const segments = 64
@@ -211,34 +222,59 @@ export function Ball({
       aimRef.current?.update(new Vector3(t.x, t.y, t.z), direction, power)
     }
 
+    /**
+     * The live values the window listeners below need.
+     *
+     * They are registered once, for the life of the component, so they cannot
+     * close over props: `onShotTaken` and friends are inline arrows and get a
+     * new identity every render. Re-registering the listeners on every render
+     * instead would drop a listener mid-drag.
+     */
+    const latest = useRef({ camera, onShotTaken, onDragEnd })
+    latest.current = { camera, onShotTaken, onDragEnd }
+    /** Set synchronously, unlike the isDragging React state. */
+    const dragging = useRef(false)
+
     function handlePointerDown(event: React.PointerEvent) {
       event.stopPropagation()
-      setIsDragging(true)
+      // Once Victor has committed to the steal the ball is his prop, not a
+      // playable object. Refusing the gesture at the very start is what makes
+      // "the player can never hit a held ball" true by construction rather
+      // than by timing.
+      if (victorState.inputLocked) return
+      dragging.current = true
       ballState.aiming = true
       dragStart.current.copy(toNormalizedDevice(event.clientX, event.clientY))
       dragCurrent.current.copy(dragStart.current)
-      ;(event.target as Element).setPointerCapture(event.pointerId)
+      // Capture on the CANVAS, not on the event target. The pointer has to keep
+      // reporting once it leaves the canvas, and the canvas is the element the
+      // window listeners below are anchored to.
+      try {
+        gl.domElement.setPointerCapture(event.pointerId)
+      } catch {
+        // Some browsers refuse capture for a pointer that has already been
+        // released; the window listeners still see the events, so this is not
+        // worth failing the shot over.
+      }
       onDragStart?.()
     }
 
-    function handlePointerMove(event: React.PointerEvent) {
-      if (!isDragging) return
-      dragCurrent.current.copy(toNormalizedDevice(event.clientX, event.clientY))
-      updateAimIndicator()
-    }
-
-    function handlePointerUp(_event: React.PointerEvent) {
-      if (!isDragging) return
-      setIsDragging(false)
+    function releaseShot() {
+      if (!dragging.current) return
+      dragging.current = false
       ballState.aiming = false
       aimRef.current?.hide()
-      onDragEnd?.()
+      latest.current.onDragEnd?.()
       const body = bodyRef.current
       if (!body) return
 
       const dragVector = new Vector2().subVectors(dragCurrent.current, dragStart.current)
-      const { direction: shotDirection, power } = computeShot(dragVector, camera)
+      const { direction: shotDirection, power } = computeShot(dragVector, latest.current.camera)
       if (dragVector.length() < MIN_DRAG_TO_SHOOT) return // a click, not a shot
+      // Second guard: the lock can engage mid-drag, between pointerdown and
+      // pointerup. Dropping the release rather than the press means the drag
+      // that was already in flight is discarded, not applied to a held ball.
+      if (victorState.inputLocked) return
 
       // The curve is expressed in LAUNCH SPEED, so convert with the body's own
       // mass rather than a hard-coded impulse scale. If the collider ever
@@ -249,8 +285,43 @@ export function Ball({
         true,
       )
       ballState.shotSerial += 1
-      onShotTaken()
+      latest.current.onShotTaken()
     }
+
+    /**
+     * Aiming and release live on the WINDOW, not on the ball mesh.
+     *
+     * They were mesh handlers, which meant r3f only delivered them while the
+     * pointer ray still hit the ball. Drag far enough — off the ball, or right
+     * out of the canvas — and the release was never seen: the shot never fired,
+     * `aiming` stayed true and the power ribbon hung on screen until the next
+     * click. Reported as "you just have an arrow showing the speed".
+     *
+     * pointerdown stays on the mesh, because starting ON the ball is what
+     * distinguishes a shot from a camera orbit. Everything after that belongs
+     * to the drag, wherever the pointer goes.
+     */
+    useEffect(() => {
+      const move = (event: PointerEvent) => {
+        if (!dragging.current) return
+        dragCurrent.current.copy(toNormalizedDevice(event.clientX, event.clientY))
+        updateAimIndicator()
+      }
+      const end = () => releaseShot()
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', end)
+      window.addEventListener('pointercancel', end)
+      // A drag that ends with the window losing focus (alt-tab, a system
+      // dialog) never produces pointerup at all.
+      window.addEventListener('blur', end)
+      return () => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', end)
+        window.removeEventListener('pointercancel', end)
+        window.removeEventListener('blur', end)
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // Safety net: if the ball ever tunnels through a wall or otherwise ends
     // up off the course with no floor beneath it, bring it back to the tee
@@ -260,6 +331,66 @@ export function Ball({
     useFrame(() => {
       const body = bodyRef.current
       if (!body) return
+
+      // --- Victor's Easter egg, handled before anything else ---------------
+      // The golf ball mesh is hidden for the stretch where it is visually a
+      // football. The collider is not removed; the body is kinematic by then,
+      // so it cannot be hit and cannot hit anything.
+      if (meshRef.current) meshRef.current.visible = !victorState.hidden
+      // The aim ring and the power ribbon are shot affordances. Showing them
+      // on a ball that cannot be played reads as a bug, so they go with it.
+      if (ringGroupRef.current) ringGroupRef.current.visible = !victorState.inputLocked
+      if (victorState.inputLocked) aimRef.current?.hide()
+
+      if (victorState.held !== heldNow.current) {
+        heldNow.current = victorState.held
+        if (victorState.held) {
+          // Kinematic, so Rapier stops integrating it: gravity, damping,
+          // contacts and the hole assist all go quiet while Victor has it. No
+          // impulse is applied in either direction — this is a body-type
+          // change, not a force.
+          body.setBodyType(2, true)
+        } else {
+          body.setBodyType(0, true)
+          // Explicitly zeroed on the way back: a kinematic body that was moved
+          // each frame carries a derived velocity, and inheriting Victor's arm
+          // speed as a free shot is exactly the "no impulse" rule being broken.
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+          body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        }
+      }
+
+      if (victorState.respawnSerial !== lastRespawn.current) {
+        lastRespawn.current = victorState.respawnSerial
+        const [tx, ty, tz] = teePosition
+        body.setTranslation({ x: tx, y: ty, z: tz }, true)
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        // Deliberately NOT onShotTaken(): the Easter egg is not a penalty
+        // stroke, so the count is untouched. Same reasoning as the
+        // out-of-bounds recovery below.
+        onPositionChange?.(tx, tz)
+      }
+
+      if (victorState.held) {
+        // Follow Victor's hand. setNextKinematicTranslation is the right call
+        // for a kinematicPositionBased body: Rapier interpolates to it and
+        // resolves contacts against it, rather than teleporting it.
+        body.setNextKinematicTranslation({
+          x: victorState.heldX,
+          y: victorState.heldY,
+          z: victorState.heldZ,
+        })
+        ballState.x = victorState.heldX
+        ballState.y = victorState.heldY
+        ballState.z = victorState.heldZ
+        ballState.vx = 0
+        ballState.vy = 0
+        ballState.vz = 0
+        ballState.speed = 0
+        return
+      }
+
       const translation = body.translation()
       if (translation.y < OUT_OF_BOUNDS_Y) {
         const [x, y, z] = teePosition
@@ -329,10 +460,9 @@ export function Ball({
     >
       <BallCollider args={[BALL_RADIUS]} />
       <mesh
+        ref={meshRef}
         castShadow
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
       >
         <sphereGeometry args={[BALL_RADIUS, 16, 16]} />
         <meshStandardMaterial color="white" />

@@ -55,29 +55,73 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   const score = shots * 10 + seconds
 
+  // Look the player up case-insensitively, matching the unique index on
+  // lower(player_name). The name is escaped first: ilike treats % and _ as
+  // wildcards, so an unescaped "100%" would match several rows and maybeSingle
+  // would fail on a name that is otherwise perfectly legal.
+  const likePattern = name.replace(/[\\%_]/g, (ch) => `\\${ch}`)
   const { data: existing, error: existingError } = await supabase
     .from('minigolf_scores')
-    .select('score')
-    .ilike('player_name', name)
+    .select('id, score')
+    .ilike('player_name', likePattern)
     .maybeSingle()
   if (existingError) {
     sendJson(res, 500, { ok: false, error: existingError.message })
     return
   }
 
+  // Best round wins: a worse round is accepted and discarded, not rejected —
+  // the player has still finished a hole, and telling them their round "failed"
+  // because it was slower would be nonsense.
   if (existing && existing.score <= score) {
     sendJson(res, 200, { ok: true })
     return
   }
 
-  const { error: upsertError } = await supabase
-    .from('minigolf_scores')
-    .upsert(
-      { player_name: name, shots, seconds, score, updated_at: new Date().toISOString() },
-      { onConflict: 'player_name' },
-    )
-  if (upsertError) {
-    sendJson(res, 500, { ok: false, error: upsertError.message })
+  // Deliberately NOT an upsert.
+  //
+  // upsert(onConflict: 'player_name') compiles to ON CONFLICT (player_name),
+  // which Postgres can only resolve against a unique index on that bare column.
+  // Ours is on lower(player_name) — an expression index, which is what makes
+  // "Victor" and "victor" the same player — so every submission failed with
+  // "no unique or exclusion constraint matching the ON CONFLICT specification".
+  // Looking the row up first and choosing insert or update does work against an
+  // expression index, and the lookup was already being done for the best-round
+  // check above, so this costs nothing extra.
+  const row = { player_name: name, shots, seconds, score, updated_at: new Date().toISOString() }
+
+  if (existing) {
+    const { error } = await supabase.from('minigolf_scores').update(row).eq('id', existing.id)
+    if (error) {
+      sendJson(res, 500, { ok: false, error: error.message })
+      return
+    }
+    sendJson(res, 200, { ok: true })
+    return
+  }
+
+  const { error: insertError } = await supabase.from('minigolf_scores').insert(row)
+  if (insertError) {
+    // 23505: two devices finished with the same name between the lookup and
+    // the insert. The index did its job; fold the loser into an update rather
+    // than showing a database error to someone who just holed out.
+    if (insertError.code === '23505') {
+      const { data: raced } = await supabase
+        .from('minigolf_scores')
+        .select('id, score')
+        .ilike('player_name', likePattern)
+        .maybeSingle()
+      if (raced && raced.score > score) {
+        const { error } = await supabase.from('minigolf_scores').update(row).eq('id', raced.id)
+        if (error) {
+          sendJson(res, 500, { ok: false, error: error.message })
+          return
+        }
+      }
+      sendJson(res, 200, { ok: true })
+      return
+    }
+    sendJson(res, 500, { ok: false, error: insertError.message })
     return
   }
 

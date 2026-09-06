@@ -2,6 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { MathUtils, Vector3 } from 'three'
 import { ballState } from './ballState'
+import { victorState } from './victorState'
 
 /**
  * Ball-centric gameplay camera, on Open-Golf's principle: the player stands
@@ -54,6 +55,14 @@ const CAMERA_HEIGHT = 3.25
 // The first attempt (4.6 / 1.05) put it at 88%, nearly clipped by the edge.
 const LOOK_AHEAD = 2.4
 const LOOK_UP = 0.5
+
+/**
+ * How far the camera backs off, and how much it lifts, at full Easter-egg
+ * focus. Sized so a shot played from the tee still frames Victor's corner of
+ * the garden without the eye leaving the boundary.
+ */
+const FOCUS_PULLBACK = 3.4
+const FOCUS_LIFT = 1.5
 
 /** Extra pull-back at speed, so a fast ball does not outrun the frame. */
 const SPEED_PULLBACK = 0.085
@@ -375,6 +384,29 @@ export function GameCamera({
       ball.y + LOOK_UP,
       ball.z + dirZ * lookAhead,
     )
+
+    // --- Victor's Easter egg: a nudge, not a takeover ----------------------
+    // While he has the ball the camera drifts toward him so the gag is in
+    // frame, and drifts back afterwards. Deliberately expressed as a WEIGHT
+    // blended into the existing desired eye/look, which are then smoothed by
+    // the same exponential below — so there is no cut in either direction, and
+    // at weight 0 (every frame outside the sequence) this is exactly a no-op.
+    const focus = victorState.focusWeight
+    if (focus > 0) {
+      const at = new Vector3(victorState.focusX, victorState.focusY, victorState.focusZ)
+      desiredLook.lerp(at, focus)
+      // Backing off along the eye-to-subject axis is what keeps BOTH Victor
+      // and the ball in shot: re-aiming alone would simply swap one for the
+      // other. Lifting slightly as well looks down over the hedge line, which
+      // is where the football is going.
+      const away = new Vector3().subVectors(desiredEye, desiredLook)
+      if (away.lengthSq() > 1e-6) {
+        away.normalize()
+        desiredEye.addScaledVector(away, FOCUS_PULLBACK * focus)
+      }
+      desiredEye.y += FOCUS_LIFT * focus
+      applyBoundaryLift(desiredEye)
+    }
 
     if (!initialised.current) {
       // First frame: adopt the rig outright rather than sliding in from the
