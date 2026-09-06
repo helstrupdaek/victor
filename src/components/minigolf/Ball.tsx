@@ -1,13 +1,12 @@
 import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef, useState } from 'react'
+import { ballState } from './ballState'
+import { AimIndicator, type AimIndicatorHandle } from './AimIndicator'
 import {
   BufferGeometry,
-  Color,
   Float32BufferAttribute,
   type Group,
-  type Mesh,
-  type MeshStandardMaterial,
   type Camera,
   Vector2,
   Vector3,
@@ -15,16 +14,28 @@ import {
 
 const BALL_RADIUS = 0.15
 const MAX_DRAG_DISTANCE = 3
-const IMPULSE_SCALE = 0.8
+// HALVED, 0.8 -> 0.4, at the owner's request: maximum shot speed goes from
+// ~167 m/s to ~84 m/s. Scaling the impulse rather than shortening
+// MAX_DRAG_DISTANCE keeps the full drag range available for fine control —
+// capping the drag instead would have made the whole power range reachable in
+// half a swipe, which is harder to aim, not easier.
+//
+// It also all but closes the recorded bush-launch defect: the headless
+// revalidation measured its onset at 80 m/s, so the reachable window shrinks
+// from 87 m/s wide to about 4. See gameplay-tuning-doc.md.
+const IMPULSE_SCALE = 0.4
 const OUT_OF_BOUNDS_Y = -5
+// ROLL LENGTH. Both were 0.4. The owner reported the ball still running on far
+// too long after the power halving, and with velocity decaying as e^(-d*t) the
+// distance to a stop is roughly proportional to 1/d — so 1.15 cuts the roll to
+// under a third of what it was, on top of the halved launch speed.
+// Raised together on purpose: damping only the linear term leaves the ball
+// visibly spinning after it has stopped translating.
+const LINEAR_DAMPING = 1.15
+const ANGULAR_DAMPING = 1.15
 const MIN_DRAG_TO_SHOOT = 0.05
 
-const AIM_ARROW_LENGTH = 0.9
-const AIM_ARROW_CONE_HEIGHT = 0.28
 
-const COLOR_GENTLE = new Color('#22c55e') // green
-const COLOR_MEDIUM = new Color('#eab308') // yellow
-const COLOR_MAX = new Color('#ef4444') // red
 
 /**
  * The single source of truth for turning a 2D screen drag into a 3D shot.
@@ -54,17 +65,8 @@ function computeShot(dragVector: Vector2, camera: Camera) {
   return { direction, dragDistance }
 }
 
-/** Interpolate green -> yellow -> red as t goes from 0 to 1. */
-function powerColor(t: number, target: Color) {
-  const clamped = Math.min(Math.max(t, 0), 1)
-  if (clamped < 0.5) {
-    target.copy(COLOR_GENTLE).lerp(COLOR_MEDIUM, clamped * 2)
-  } else {
-    target.copy(COLOR_MEDIUM).lerp(COLOR_MAX, (clamped - 0.5) * 2)
-  }
-}
-
-const UP = new Vector3(0, 1, 0)
+// The green/yellow/red power ramp moved to AimIndicator.tsx, which now uses
+// Open-Golf's own four-stop values from its game.cfg rather than three.
 
 // Radius of the dashed aim-range ring shown around the ball at all times —
 // a rough visual indicator of shot range, not tied to the exact impulse
@@ -98,9 +100,12 @@ export function Ball({
     const dragStart = useRef(new Vector2())
     const dragCurrent = useRef(new Vector2())
 
-    const arrowGroupRef = useRef<Group>(null)
-    const shaftMeshRef = useRef<Mesh>(null)
-    const coneMeshRef = useRef<Mesh>(null)
+    // The old cylinder+cone arrow is gone, replaced by <AimIndicator>: a broad
+    // tapered power ribbon behind the ball plus forward direction chevrons, on
+    // Open-Golf's aiming language. It is driven from THIS component's own
+    // computeShot() result, so what is drawn can never disagree with the
+    // impulse that is applied.
+    const aimRef = useRef<AimIndicatorHandle | null>(null)
     // The aim-range ring lives outside the RigidBody's own group so it
     // doesn't spin along with the ball's rolling rotation — only its
     // position is synced to the ball each frame, below.
@@ -134,33 +139,27 @@ export function Ball({
       )
     }
 
-    function updateAimArrow() {
-      const arrowGroup = arrowGroupRef.current
-      if (!arrowGroup) return
-
+    function updateAimIndicator() {
       const dragVector = new Vector2().subVectors(dragCurrent.current, dragStart.current)
       if (dragVector.lengthSq() < 1e-8) {
-        arrowGroup.visible = false
+        aimRef.current?.hide()
         return
       }
-      arrowGroup.visible = true
-
       const { direction, dragDistance } = computeShot(dragVector, camera)
-      arrowGroup.quaternion.setFromUnitVectors(UP, direction)
-
-      const powerT = dragDistance / MAX_DRAG_DISTANCE
-      const stretch = 0.6 + powerT // longer arrow = more power
-      arrowGroup.scale.set(1, stretch, 1)
-
-      const shaftMat = shaftMeshRef.current?.material as MeshStandardMaterial | undefined
-      const coneMat = coneMeshRef.current?.material as MeshStandardMaterial | undefined
-      if (shaftMat) powerColor(powerT, shaftMat.color)
-      if (coneMat) powerColor(powerT, coneMat.color)
+      const body = bodyRef.current
+      if (!body) return
+      const t = body.translation()
+      aimRef.current?.update(
+        new Vector3(t.x, t.y, t.z),
+        direction,
+        Math.min(dragDistance / MAX_DRAG_DISTANCE, 1),
+      )
     }
 
     function handlePointerDown(event: React.PointerEvent) {
       event.stopPropagation()
       setIsDragging(true)
+      ballState.aiming = true
       dragStart.current.copy(toNormalizedDevice(event.clientX, event.clientY))
       dragCurrent.current.copy(dragStart.current)
       ;(event.target as Element).setPointerCapture(event.pointerId)
@@ -170,12 +169,14 @@ export function Ball({
     function handlePointerMove(event: React.PointerEvent) {
       if (!isDragging) return
       dragCurrent.current.copy(toNormalizedDevice(event.clientX, event.clientY))
-      updateAimArrow()
+      updateAimIndicator()
     }
 
     function handlePointerUp(_event: React.PointerEvent) {
       if (!isDragging) return
       setIsDragging(false)
+      ballState.aiming = false
+      aimRef.current?.hide()
       onDragEnd?.()
       const body = bodyRef.current
       if (!body) return
@@ -189,6 +190,7 @@ export function Ball({
         { x: shotDirection.x * impulseMagnitude, y: 0, z: shotDirection.z * impulseMagnitude },
         true,
       )
+      ballState.shotSerial += 1
       onShotTaken()
     }
 
@@ -227,6 +229,18 @@ export function Ball({
         )
       }
 
+      // Publish position and velocity for the camera (ballState.ts). This is
+      // the ONLY thing added to this file for the ball-centric camera: it is a
+      // one-way report, and nothing below or above reads it back, so no shot
+      // power, damping, friction, restitution or hole behaviour is affected.
+      ballState.x = translation.x
+      ballState.y = translation.y
+      ballState.z = translation.z
+      ballState.vx = linvel.x
+      ballState.vy = linvel.y
+      ballState.vz = linvel.z
+      ballState.speed = Math.hypot(linvel.x, linvel.z)
+
       // Keep the aim-range ring centered on the ball's current position
       // (position only — deliberately not the ball's rolling rotation).
       if (ringGroupRef.current) {
@@ -251,8 +265,8 @@ export function Ball({
       colliders={false}
       restitution={0.5}
       friction={0.6}
-      linearDamping={0.4}
-      angularDamping={0.4}
+      linearDamping={LINEAR_DAMPING}
+      angularDamping={ANGULAR_DAMPING}
       ccd={true}
     >
       <BallCollider args={[BALL_RADIUS]} />
@@ -266,22 +280,8 @@ export function Ball({
         <meshStandardMaterial color="white" />
       </mesh>
 
-      {isDragging && (
-        <group ref={arrowGroupRef} visible={false}>
-          <mesh ref={shaftMeshRef} position={[0, BALL_RADIUS + AIM_ARROW_LENGTH / 2, 0]}>
-            <cylinderGeometry args={[0.025, 0.025, AIM_ARROW_LENGTH, 8]} />
-            <meshStandardMaterial color={COLOR_GENTLE} />
-          </mesh>
-          <mesh
-            ref={coneMeshRef}
-            position={[0, BALL_RADIUS + AIM_ARROW_LENGTH + AIM_ARROW_CONE_HEIGHT / 2, 0]}
-          >
-            <coneGeometry args={[0.08, AIM_ARROW_CONE_HEIGHT, 8]} />
-            <meshStandardMaterial color={COLOR_GENTLE} />
-          </mesh>
-        </group>
-      )}
     </RigidBody>
+    <AimIndicator handleRef={aimRef} />
     </>
   )
 }

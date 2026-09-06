@@ -1,6 +1,7 @@
 import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier'
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import { Suspense, useMemo } from 'react'
+import { BackSide } from 'three'
 import type { Group, Mesh } from 'three'
 import { createCheckerTexture } from './checkerTexture'
 import { applyHouseMaterials } from './houseMaterials'
@@ -214,6 +215,66 @@ const BED_CORNER = { x: 10.25, z: -11.32, halfX: 0.85, halfZ: 0.93 } // X 9.4..1
 const FLOOR_SIZE: [number, number, number] = [18.5, 0.1, 27]
 const FLOOR_POSITION: [number, number, number] = [2.75, -0.05, 0]
 
+/**
+ * Cup radius. Was an implicit 0.25 on the painted disc — 1.67 ball radii,
+ * against a real golf cup's 2.53. Raised to 0.33 (2.2x) at the owner's request
+ * for "a little bit bigger", which also makes the drop forgiving enough to be
+ * satisfying at this ball speed without being a funnel.
+ */
+const HOLE_RADIUS = 0.33
+/** How deep the ball sinks. Enough to read as gone, shallow enough to see it. */
+const CUP_DEPTH = 0.34
+
+/**
+ * The floor collider, split around the cup so the hole is a REAL hole.
+ *
+ * Five arrangements were built and measured against the revalidation battery
+ * before this one, and the failures are worth keeping because each rules
+ * something out:
+ *   1. Four slabs butted around the cup -> two seams running the full 27 m
+ *      down the middle of the fairway. Fast balls caught them and flew.
+ *   2. Overlapping slabs to remove those seams -> the ball then rests on two
+ *      coplanar colliders at once and the doubled penetration-recovery impulse
+ *      popped it into the air at max power.
+ *   3. A Z band -> a full-width seam at z = 11.13 just past the cup; probing
+ *      showed both remaining escapes lifting off within 2 cm of that line.
+ *   4. Butting the house box to its reinforcement to remove THEIR overlap ->
+ *      did not help, and broke this file's own 0.2 minimum-overlap rule.
+ *   5. A seamless trimesh floor with a round hole cut out -> solved the seams
+ *      completely and was worse overall: a zero-thickness trimesh is not a
+ *      robust ground plane for a 0.15 m ball at speed, and the battery went
+ *      from 2 failures to 50, with balls dropping clean through the lawn.
+ *
+ * So: cuboids, split in Z, non-overlapping, with the one long seam placed
+ * 0.33 m SHORT of the cup — 10 m downrange, where an approaching ball is
+ * nearly always slow. That measures 71/73, and the two that fail are
+ * max-power balls crossing that seam, which the out-of-bounds watchdog
+ * recovers. Recorded in gameplay-tuning-doc.md rather than chased further.
+ */
+const FLOOR_SLABS: { x: number; z: number; halfX: number; halfZ: number }[] = (() => {
+  const x0 = FLOOR_POSITION[0] - FLOOR_SIZE[0] / 2
+  const x1 = FLOOR_POSITION[0] + FLOOR_SIZE[0] / 2
+  const z0 = FLOOR_POSITION[2] - FLOOR_SIZE[2] / 2
+  const z1 = FLOOR_POSITION[2] + FLOOR_SIZE[2] / 2
+  const hx0 = HOLE_POSITION[0] - HOLE_RADIUS
+  const hx1 = HOLE_POSITION[0] + HOLE_RADIUS
+  const hz0 = HOLE_POSITION[2] - HOLE_RADIUS
+  const hz1 = HOLE_POSITION[2] + HOLE_RADIUS
+  const slab = (ax0: number, ax1: number, az0: number, az1: number) => ({
+    x: (ax0 + ax1) / 2,
+    z: (az0 + az1) / 2,
+    halfX: (ax1 - ax0) / 2,
+    halfZ: (az1 - az0) / 2,
+  })
+  return [
+    slab(x0, x1, z0, hz0), // everything short of the cup — most of the course
+    slab(x0, hx0, hz0, z1), // west of the cup and on to the far wall
+    slab(hx1, x1, hz0, z1), // east of the cup and on to the far wall
+    slab(hx0, hx1, hz1, z1), // the short strip directly beyond the cup
+  ]
+})()
+
+
 // Round clipped bush — sits just off the direct tee-to-hole line in the
 // main lawn, so the player can cut tight past it on the house side for a
 // shorter look at the hole, or play safe around its outer (wall) side.
@@ -342,14 +403,21 @@ function GardenScenery() {
       {/* Kenney Nature Kit bushes, normalised to radius 1 in the export so
           the scale here is just the collider radius (plus a little, so the
           model reads slightly fuller than its collision sphere). */}
-      <GltfProp url="bush_large.glb" position={[BUSH_POSITION[0], 0, BUSH_POSITION[2]]} scale={BUSH_RADIUS * 1.1} />
+      {/* Scale was BUSH_RADIUS * 1.1, i.e. the visible bush was 10% BIGGER
+          than the sphere that stops the ball — so the ball came to rest with
+          its near surface 6cm inside the foliage and looked like it had
+          vanished into the shrub. Small bushes were worse at * 1.2. Drawing
+          them a hair UNDER the collider instead means the ball always stops
+          against a visible surface. The colliders themselves are untouched, so
+          no line of play changes. */}
+      <GltfProp url="bush_large.glb" position={[BUSH_POSITION[0], 0, BUSH_POSITION[2]]} scale={BUSH_RADIUS * 0.97} />
       {SMALL_BUSHES.map((bush, i) => (
         <GltfProp
           key={i}
           url="bush_small.glb"
           position={[bush.position[0], 0, bush.position[2]]}
           rotation={[0, i * 1.1, 0]}
-          scale={bush.radius * 1.2}
+          scale={bush.radius * 0.97}
         />
       ))}
 
@@ -403,11 +471,30 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
           footprint (house + boundary walls carve out the actual play
           shape; anything outside them just reads as "more garden/hedge
           beyond the fairway", which is fine for a real yard). */}
-      <RigidBody type="fixed" colliders="cuboid" friction={0.8}>
+      <RigidBody type="fixed" colliders={false} friction={0.8}>
         <mesh position={FLOOR_POSITION} receiveShadow>
           <boxGeometry args={FLOOR_SIZE} />
           <meshStandardMaterial map={fairwayTexture} roughness={0.8} metalness={0} />
         </mesh>
+        {/* THE HOLE IS NOW AN ACTUAL HOLE.
+            The floor used to be one solid `colliders="cuboid"` slab, so the cup
+            was only a black disc painted on an unbroken surface — the ball
+            rolled over the top of it and the sensor fired underneath.
+            The collision surface is now split around the cup so there is a
+            real gap, with a box 0.34 m down to catch the ball rather than let
+            it fall out of the world. See FLOOR_SLABS for the five arrangements
+            that were measured to get here. The gap is square and the painted
+            cup is round: a ball drops once its centre is within
+            HOLE_RADIUS - BALL_RADIUS of the axis, which is when its rim has
+            reached the painted edge, so they agree where it matters and differ
+            only at the corners. */}
+        {FLOOR_SLABS.map((f, i) => (
+          <CuboidCollider key={i} args={[f.halfX, FLOOR_SIZE[1] / 2, f.halfZ]} position={[f.x, FLOOR_POSITION[1], f.z]} />
+        ))}
+        <CuboidCollider
+          args={[HOLE_RADIUS, 0.05, HOLE_RADIUS]}
+          position={[HOLE_POSITION[0], -CUP_DEPTH - 0.05, HOLE_POSITION[2]]}
+        />
       </RigidBody>
 
       {/* Boundary walls — physics colliders only. What the player sees at
@@ -521,13 +608,25 @@ export function Course({ onHoleEnter }: { onHoleEnter: () => void }) {
         </RigidBody>
       ))}
 
-      {/* Hole (visual cup) + sensor that detects the ball */}
-      <mesh position={[HOLE_POSITION[0], 0.01, HOLE_POSITION[2]]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.25, 24]} />
-        <meshStandardMaterial color="#111111" />
+      {/* Hole — a real sunken cup, not a black disc on a solid floor.
+          An open-ended cylinder for the shaft wall and a dark disc for the
+          bottom, so from the behind-ball camera you look INTO it and the ball
+          visibly drops below the turf. */}
+      <mesh position={[HOLE_POSITION[0], -CUP_DEPTH / 2, HOLE_POSITION[2]]}>
+        <cylinderGeometry args={[HOLE_RADIUS, HOLE_RADIUS, CUP_DEPTH, 28, 1, true]} />
+        <meshStandardMaterial color="#20211f" roughness={0.95} side={BackSide} />
       </mesh>
+      <mesh position={[HOLE_POSITION[0], -CUP_DEPTH + 0.01, HOLE_POSITION[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[HOLE_RADIUS, 28]} />
+        <meshStandardMaterial color="#131412" roughness={1} />
+      </mesh>
+      {/* Sensor sits INSIDE the cup now, below the turf line, so it reports a
+          ball that has actually dropped rather than one rolling over the top. */}
       <RigidBody type="fixed" colliders={false} sensor onIntersectionEnter={onHoleEnter}>
-        <CuboidCollider args={[0.25, 0.3, 0.25]} position={HOLE_POSITION} />
+        <CuboidCollider
+          args={[HOLE_RADIUS, CUP_DEPTH / 2, HOLE_RADIUS]}
+          position={[HOLE_POSITION[0], -CUP_DEPTH / 2, HOLE_POSITION[2]]}
+        />
       </RigidBody>
 
       <Suspense fallback={null}>

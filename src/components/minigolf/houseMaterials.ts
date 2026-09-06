@@ -139,31 +139,60 @@ function paintRoofTile() {
   // perfectly regular corduroy, which reads as machined metal decking; real
   // tile has a little course-to-course drift.
   const [el, ctx] = canvas(128, 192)
-  for (const [i, tone] of (['#787c86', '#727680'] as const).entries()) {
+  // VISUAL PASS F — the roof was still reading too light beside the brick.
+  //
+  // Measured off the live render, the lit field came out around #666b74
+  // (linear luminance 0.146). course layout.png's roof measures #737082 /
+  // #67647b in its lit areas — NOMINALLY brighter than ours. So the problem
+  // was never the base value: it was that the reference gets its weight from
+  // deep, high-contrast shadow BETWEEN big barrel tiles, while ours was a
+  // nearly flat field with a hairline course mark. A flat mid-grey plane reads
+  // lighter than a strongly modelled one at the same mean value.
+  //
+  // So the field is darkened by roughly a third AND the course shadow is
+  // deepened and widened, which is what actually makes it read as charcoal
+  // tile. Detail goes UP, not down — the brief explicitly rules out crushing
+  // it to featureless black, and the lit lip is kept bright enough that every
+  // course still catches the sun.
+  //
+  // The hue also loses most of its blue. Ours was a slate-blue #787c86
+  // (b - r = 14); the reference is a warmer graphite (#737082, b - r = 13 but
+  // at a much lower saturation relative to its value). At our new darker
+  // value the same blue delta reads as cold plastic, so it is halved.
+  //
+  // Calibrated, not guessed. Region medians of linear luminance over the main
+  // sunlit slope: before this pass 0.136, course layout.png 0.112. The first
+  // attempt landed on 0.077 — past the reference and into the "crushed to
+  // featureless black" the brief rules out — so the field was brought back up
+  // about a third and the course shadow eased from #24262b/11px to
+  // #2d3036/10px, which also pulls the p90/p10 spread back from 18.0 toward
+  // the reference's 9.0.
+  for (const [i, tone] of (['#5f6268', '#5a5d64'] as const).entries()) {
     const y0 = i * 96
-    // Body shading within the course. Target linear ~0.17 (the original flat
-    // factor was 0.20) — see paintBrick for why these hexes look so light.
     const grad = ctx.createLinearGradient(0, y0, 0, y0 + 96)
     grad.addColorStop(0, tone)
-    grad.addColorStop(0.7, '#6e727b')
-    grad.addColorStop(1, '#666a73')
+    grad.addColorStop(0.7, '#565961')
+    grad.addColorStop(1, '#4e5158')
     ctx.fillStyle = grad
     ctx.fillRect(0, y0, 128, 96)
-    // The course line is the load-bearing detail: without it the roof reads
-    // as one flat charcoal slab from the game camera. Shadow cast by the
-    // course above, then the lit lip of this course catching the sun.
-    ctx.fillStyle = '#4a4e56'
-    ctx.fillRect(0, y0, 128, 7)
-    ctx.fillStyle = '#8f949e'
-    ctx.fillRect(0, y0 + 7, 128, 4)
+    // Shadow cast by the course above — now 11px rather than 7 and much
+    // darker, because this is the detail that carries the whole read.
+    ctx.fillStyle = '#2d3036'
+    ctx.fillRect(0, y0, 128, 10)
+    // The lit lip of this course catching the sun. Kept bright on purpose:
+    // it is the only thing preventing the darker field from going flat.
+    ctx.fillStyle = '#7e838d'
+    ctx.fillRect(0, y0 + 11, 128, 5)
+    ctx.fillStyle = '#666a72'
+    ctx.fillRect(0, y0 + 16, 128, 3)
   }
-  // Vertical roll/rib between tiles. Deliberately LOW contrast: round 1 gave
-  // these the same weight as the course lines and the roof read as corrugated
-  // metal streaked from ridge to eaves rather than as courses of tile.
+  // Vertical roll/rib between tiles. Still deliberately lower contrast than
+  // the course lines, so the roof reads as courses of tile rather than as
+  // corrugated metal streaked from ridge to eaves.
   for (const x of [0, 64]) {
-    ctx.fillStyle = '#64686f'
+    ctx.fillStyle = '#383b40'
     ctx.fillRect(x, 0, 3, 192)
-    ctx.fillStyle = '#858992'
+    ctx.fillStyle = '#63676e'
     ctx.fillRect(x + 3, 0, 2, 192)
   }
   return finish(el)
@@ -331,6 +360,8 @@ function projectUv(
     }
   }
   const ySpan = yMax - yMin || 1
+  /** Angular quantum for the projection basis — see the MOIRE FIX below. */
+  const SNAP = (Math.PI * 2) / 64
 
   for (let i = 0; i < pos.count; i++) {
     const px = pos.getX(i) + ox
@@ -346,6 +377,22 @@ function projectUv(
     if (hLen > 1e-4) {
       hx /= hLen
       hz /= hLen
+      // Pass F — MOIRE FIX. This basis is built per VERTEX, so on a bevelled,
+      // smooth-shaded roof plane the normal drifts a fraction of a degree from
+      // one vertex to the next and the projection stops being affine across
+      // the face. The result was concentric arc banding right across the main
+      // roof slopes, clearly visible in the live capture: the texture appeared
+      // to swirl rather than run in straight courses.
+      //
+      // Snapping the horizontal normal to the nearest 1/64 turn (5.6 degrees)
+      // makes every vertex on one planar face agree on the same basis, so the
+      // projection is affine again and the courses run straight. Faces that
+      // genuinely differ in orientation — the four slopes of a hip roof are
+      // 90 degrees apart — keep their own basis, which a single per-mesh
+      // average normal would have destroyed.
+      const snapped = Math.round(Math.atan2(hz, hx) / SNAP) * SNAP
+      hx = Math.cos(snapped)
+      hz = Math.sin(snapped)
       // U always runs horizontally along the surface (perpendicular to the
       // normal's horizontal part), for both walls and roof slopes.
       u = -hz * px + hx * pz
@@ -409,11 +456,16 @@ const RECOLOUR: Record<string, { color: string; roughness?: number; metalness?: 
   // wrong note on the roof after the missing tiles. On the real house (and in
   // House/course layout.png) the ridge is the same dark tile as the field,
   // only slightly catching the light.
-  roof_ridge: { color: '#8d929b', roughness: 0.6 },
+  // Pass F: followed the tiled field down (see paintRoofTile). At #8d929b it
+  // was brighter than the new field's LIT LIP, so it went back to reading as a
+  // metal capping strip the moment the field darkened.
+  roof_ridge: { color: '#666a72', roughness: 0.6 },
   // The sunroom wing's flat roof (x -5.1..-3.15, z -0.8..4.8). It was a hair
   // LIGHTER than the main roof, so it separated from it as a pale slab. Set
   // just below the tiled field's value so it reads as the same building.
-  roof_flat_charcoal: { color: '#787d86', roughness: 0.65 },
+  // Pass F: same move, kept just below the tiled field's mean so the wing's
+  // flat roof still reads as the same building rather than a pale slab.
+  roof_flat_charcoal: { color: '#565961', roughness: 0.65 },
 
   // ---------------------------------------------------------------------
   // trim_black — THE THIRD REPORT TO FLAG THIS, AND THE ONE THAT FIXES IT.
@@ -576,13 +628,27 @@ const RECOLOUR: Record<string, { color: string; roughness?: number; metalness?: 
   // pulling blue. The warm sun in MinigolfCanvas.tsx does most of that; this
   // takes the last of the neutrality out of the base so the ramp's warm near
   // end has somewhere to go.
-  distant_bg: { color: '#ece3d2' },
+  // Pass F — BACKGROUND RESTRAINT. The neighbours' walls measured #c2d7e9 in
+  // the live render against the sky's own #a2ccf0: brighter than the sky they
+  // sit in front of, which is why they pulled the eye. course layout.png's
+  // equivalents measure #b9afb4 — a touch DARKER than its sky and noticeably
+  // less saturated. Pulled down and desaturated to sit behind the sky rather
+  // than in front of it, which is what atmospheric distance actually does.
+  // Scale, geometry and hedge height are untouched: the camera is locked and
+  // regrowing the hedge to hide them was already rejected.
+  distant_bg: { color: '#cfcdc6' },
   // Pass D's haze ramp multiplies this down hard on the nearest houses
   // (their COLOR_0 is ~0.43), so it has to sit higher than it looks: at
   // #8e9096 the near rank rendered as near-black caps once the ambient came
   // down, which reinstated exactly the 'dark slab' silhouette pass D fixed.
-  distant_roof: { color: '#adafb2' }, // (vc) was #a2a8b1 — light AND blue at 45 m
-  distant_window: { color: '#7d7f86' }, // (vc)
+  // Pass F: the neighbours' roofs were LIGHTER than our own roof even before
+  // ours was darkened, so they read as the nearest bright objects in frame.
+  // Now well below the sky and far below our brick.
+  distant_roof: { color: '#8d8b8a' }, // was #adafb2, and #a2a8b1 before that
+  // Pass F: window detail is the single loudest cue that a background building
+  // is "close". Dropped toward its wall value so the neighbours read as massing
+  // rather than as buildings with readable facades.
+  distant_window: { color: '#6d6f74' }, // was #7d7f86
   skyline_near_a: { color: '#7eb164' }, // (vc)
   skyline_near_b: { color: '#6b9959' }, // (vc)
   skyline_mid: { color: '#8db476' }, // (vc)

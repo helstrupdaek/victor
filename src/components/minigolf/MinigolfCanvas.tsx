@@ -1,5 +1,8 @@
 import { Canvas, useThree } from '@react-three/fiber'
-import { ContactShadows, OrbitControls } from '@react-three/drei'
+import { ContactShadows } from '@react-three/drei'
+import { GameCamera } from './GameCamera'
+import { ballState } from './ballState'
+import { BannerPlane } from './BannerPlane'
 import { Physics } from '@react-three/rapier'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -7,7 +10,11 @@ import { Ball } from './Ball'
 import { Course, HOLE_POSITION, TEE_POSITION } from './Course'
 
 /**
- * Where the default camera looks — and, critically, also <OrbitControls>'s
+ * HISTORICAL, and no longer the gameplay camera's target: <GameCamera>
+ * anchors on the ball. Kept because build_environment.py's `cam_game` preview
+ * still aims here, so the Blender previews and the live scene stay comparable.
+ *
+ * Where the default camera used to look — and, critically, also OrbitControls'
  * orbit target.
  *
  * These MUST be the same point. <OrbitControls makeDefault> re-aims the
@@ -186,6 +193,7 @@ export default function MinigolfCanvas({
   // not also respond to the same pointer drag — see Ball's onDragStart/
   // onDragEnd callbacks below.
   const [isAiming, setIsAiming] = useState(false)
+  const [isHoled, setIsHoled] = useState(false)
   // Updated directly (not via React state) on every physics frame, so the
   // live distance readout doesn't trigger a re-render per frame.
   const distanceRef = useRef<HTMLSpanElement>(null)
@@ -206,6 +214,9 @@ export default function MinigolfCanvas({
   function handleHoleEnter() {
     if (isDoneRef.current || startTimeRef.current === null) return
     isDoneRef.current = true
+    // Camera only: GameCamera stops chasing and holds on the cup.
+    setIsHoled(true)
+    ballState.holed = true
     const seconds = (performance.now() - startTimeRef.current) / 1000
     onComplete({ shots: shotsRef.current, seconds })
   }
@@ -238,7 +249,12 @@ export default function MinigolfCanvas({
         //    rendering. At fov 50 from closer in, either the START corner or
         //    the screen-left planting/tree layer fell outside that narrower
         //    frame. build_environment.py now renders 1050x1000 to match.
-        camera={{ position: [9, 10.6, -20.5], fov: 54 }}
+        // Only the value before GameCamera's first frame, which adopts the
+        // behind-the-ball rig outright rather than sliding in from here. fov
+        // came down 54 -> 46 with the move to a ball-centric rig: at 6 m from
+        // the subject, 54 degrees stretches the near lawn and shrinks the house
+        // into the distance, which is the opposite of what this scene needs.
+        camera={{ position: [9, 10.6, -20.5], fov: 46 }}
         onCreated={({ camera, gl, scene }) => {
           camera.lookAt(...CAMERA_TARGET)
           // DEV-ONLY measurement handle. This project has twice shipped a
@@ -252,14 +268,17 @@ export default function MinigolfCanvas({
           // (the readback must be in the same task as the render, because the
           // drawing buffer is not preserved). Stripped from production builds.
           if (import.meta.env.DEV) {
-            ;(window as unknown as Record<string, unknown>).__minigolf = { gl, scene, camera }
+            // ballState rides along so headless validation can project the
+            // ball to screen space and dispatch real pointer gestures at it —
+            // which is how this phase finally played actual shots in a test.
+            ;(window as unknown as Record<string, unknown>).__minigolf = { gl, scene, camera, ballState }
             // DEV-ONLY camera override, e.g. /minigolf?cam=9,26,-11. It exists
             // so the phase's acceptance captures are reproducible from a
             // headless browser instead of hand-driven orbit gestures that pass
             // C recorded as "genuine live frames but not reproducible".
-            // CAMERA_TARGET is untouched — OrbitControls still aims at it, and
-            // it re-derives its orbit from whatever position the camera is at,
-            // so this only moves the eye. Absent in production (the whole
+            // NOTE: with <GameCamera> driving position and orientation every
+            // frame, this override is overwritten immediately. It survives only
+            // as a way to seed the very first frame. Absent in production (the whole
             // block is stripped by `import.meta.env.DEV`) and absent from a
             // plain /minigolf URL, so the shipped default framing — which
             // passed its own acceptance gate — cannot be affected.
@@ -322,6 +341,32 @@ export default function MinigolfCanvas({
             angle, but as soon as the player orbits up it is the difference
             between a horizon and the page's cream background bleeding in. */}
         <SkyBackground />
+
+        {/* VISUAL PASS F — BACKGROUND RESTRAINT, done with atmosphere rather
+            than with geometry.
+            Region medians of linear luminance across the background band
+            (neighbours, distant trees, the outer ground plate) measured 0.300
+            against course layout.png's 0.177, with a p90/p10 spread of 23
+            against its 11. So the neighbours were both too bright and far too
+            contrasty — they read as mid-ground, not background. Re-tinting the
+            distant_bg / distant_roof / distant_window materials barely moved
+            the number, because most of that band by AREA is the outer lawn
+            plate and the background trees, not the buildings.
+            Distance fog fixes all of it at once, and is one of the tools the
+            brief explicitly allows. NEAR is set past the far hedge (our own
+            garden's furthest corner is ~38 m from the camera), so nothing
+            inside the property is touched: the course, the ball, the house and
+            the hedge render exactly as before. Beyond 45 m everything ramps
+            toward the horizon colour, which is what actual aerial perspective
+            does. No geometry, no camera change, no hedge regrowth. */}
+        <fog attach="fog" args={['#cfe0f0', 45, 145]} />
+
+        {/* Periodic banner-tow Easter egg. Sits here, OUTSIDE <Physics> and
+            outside <Course>, so it has no collider, no contact with the ball
+            and no bearing on the simulation — it is scenery that happens to
+            move. See BannerPlane.tsx for the flight path, which is derived
+            from this file's camera position and CAMERA_TARGET. */}
+        <BannerPlane />
 
         {/* LIGHTING RIG — VISUAL PASS E.
             History: hemisphere 1.15 / directional 1.9, then 1.4 / 2.25 during
@@ -446,15 +491,15 @@ export default function MinigolfCanvas({
           far={2.5}
           resolution={512}
         />
-        <OrbitControls
-          enabled={!isAiming}
-          makeDefault
-          target={CAMERA_TARGET}
-          enableDamping
-          minDistance={4}
-          maxDistance={40}
-          maxPolarAngle={Math.PI / 2 - 0.05}
-        />
+        {/* BALL-CENTRIC GAMEPLAY CAMERA — replaces <OrbitControls>.
+            OrbitControls orbited CAMERA_TARGET, a fixed point in the middle of
+            the garden, which is an overview camera: useful for showing the
+            property, wrong for playing a shot. GameCamera anchors on the ball
+            instead — it sits behind it, orbits around it, chases it, and
+            re-settles behind it facing the hole. See GameCamera.tsx.
+            It also resolves the gesture clash OrbitControls had: a drag that
+            starts on the ball is a shot (isAiming), anything else is an aim. */}
+        <GameCamera holePosition={HOLE_POSITION} isAiming={isAiming} holed={isHoled} />
       </Canvas>
     </div>
   )
