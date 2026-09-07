@@ -454,11 +454,16 @@ test('uses a pre-parsed Buffer body (Vercel)', async () => {
 test('rejects a streamed body over the cap without reading it all', async () => {
   // A generator that would run forever, counting how many chunks were pulled.
   // The cap is crossed on the second chunk; a reader that drains the stream
-  // and checks afterwards would never return, and one that checks per chunk
-  // pulls exactly two. The count is the proof, not just the rejection.
+  // and checks afterwards would never return. The count is 2 because
+  // Readable.from reads exactly one chunk ahead (highWaterMark 1 for
+  // iterables), so it measures the stream's readahead, not the reader's
+  // consumption; the hang of a draining reader is the real proof.
   let pulled = 0
   async function* endless() {
-    for (;;) { pulled++; yield Buffer.from('a'.repeat(60)) }
+    for (;;) {
+      yield Buffer.from('a'.repeat(60))
+      pulled++
+    }
   }
   await assert.rejects(readRawBody(Readable.from(endless()) as never, 100), BodyTooLarge)
   assert.equal(pulled, 2)
