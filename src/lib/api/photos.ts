@@ -1,6 +1,6 @@
 import { readDemo, writeDemo } from '@/lib/demoStore'
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient'
-import type { Photo } from '@/types'
+import type { GalleryDirection, Photo } from '@/types'
 
 const DEMO_KEY = 'photos'
 const BUCKET = 'gallery'
@@ -14,19 +14,29 @@ function withPublicUrl(photo: Omit<Photo, 'url'>): Photo {
   return { ...photo, url: photo.storage_path }
 }
 
-export async function fetchPublishedPhotos(): Promise<Photo[]> {
+/** Pinned first, then by date in the direction the hosts chose. */
+function orderPhotos(photos: Omit<Photo, 'url'>[], direction: GalleryDirection) {
+  const sign = direction === 'newest' ? -1 : 1
+  return [...photos].sort((a, b) => {
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
+    return sign * a.created_at.localeCompare(b.created_at)
+  })
+}
+
+export async function fetchPublishedPhotos(direction: GalleryDirection = 'newest'): Promise<Photo[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
       .from('photos')
       .select('*')
       .eq('is_published', true)
-      .order('sort_order', { ascending: true })
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: direction === 'oldest' })
     if (error) throw error
     return data.map(withPublicUrl)
   }
 
   const photos = readDemo<Omit<Photo, 'url'>[]>(DEMO_KEY, [])
-  return photos.filter((p) => p.is_published).map(withPublicUrl)
+  return orderPhotos(photos.filter((p) => p.is_published), direction).map(withPublicUrl)
 }
 
 /** Admin-only: includes unpublished photos, requires an authenticated session (RLS). */
@@ -65,6 +75,9 @@ export async function uploadPhoto(
       width: dimensions?.width ?? null,
       height: dimensions?.height ?? null,
       sort_order: 0,
+      source: 'admin',
+      guest_name: null,
+      is_pinned: false,
     })
     if (error) throw error
     return
@@ -81,6 +94,9 @@ export async function uploadPhoto(
     width: dimensions?.width ?? null,
     height: dimensions?.height ?? null,
     sort_order: 0,
+    source: 'admin',
+    guest_name: null,
+    is_pinned: false,
   })
   writeDemo(DEMO_KEY, photos)
 }
@@ -140,4 +156,53 @@ function readImageDimensions(file: File): Promise<{ width: number; height: numbe
     }
     img.src = objectUrl
   })
+}
+
+export async function setPhotoPinned(id: string, pinned: boolean): Promise<void> {
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase.from('photos').update({ is_pinned: pinned }).eq('id', id)
+    if (error) throw error
+    return
+  }
+  const photos = readDemo<Omit<Photo, 'url'>[]>(DEMO_KEY, [])
+  writeDemo(DEMO_KEY, photos.map((p) => (p.id === id ? { ...p, is_pinned: pinned } : p)))
+}
+
+export async function updatePhotoText(
+  id: string,
+  text: { caption: string | null; guest_name: string | null },
+): Promise<void> {
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase.from('photos').update(text).eq('id', id)
+    if (error) throw error
+    return
+  }
+  const photos = readDemo<Omit<Photo, 'url'>[]>(DEMO_KEY, [])
+  writeDemo(DEMO_KEY, photos.map((p) => (p.id === id ? { ...p, ...text } : p)))
+}
+
+/**
+ * Removes every guest photo and its file. This is what makes testing before
+ * the party clean: switch on, shoot, look, delete all, switch off.
+ */
+export async function deleteAllGuestPhotos(): Promise<number> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from('photos')
+      .select('id, storage_path')
+      .eq('source', 'guest')
+    if (error) throw error
+    if (data.length === 0) return 0
+    const { error: dbError } = await supabase.from('photos').delete().eq('source', 'guest')
+    if (dbError) throw dbError
+    // Files second: a row without a file is invisible; a file without a row
+    // is an orphan nobody can see either, so this order loses nothing if the
+    // second call fails.
+    await supabase.storage.from(BUCKET).remove(data.map((p) => p.storage_path))
+    return data.length
+  }
+  const photos = readDemo<Omit<Photo, 'url'>[]>(DEMO_KEY, [])
+  const kept = photos.filter((p) => p.source !== 'guest')
+  writeDemo(DEMO_KEY, kept)
+  return photos.length - kept.length
 }

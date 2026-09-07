@@ -46,8 +46,16 @@ export interface Photo {
   height: number | null
   sort_order: number
   is_published: boolean
+  /** 'guest' when it came in through /kamera; 'admin' when uploaded from /admin. */
+  source: 'admin' | 'guest'
+  /** Optional first name the guest typed under their photo. */
+  guest_name: string | null
+  /** Pinned photos go to the front of the wall, whatever the order setting. */
+  is_pinned: boolean
   url: string
 }
+
+export type GalleryDirection = 'newest' | 'oldest'
 
 export interface TimelineEvent {
   id: string
