@@ -26,8 +26,19 @@ import type { AdminTodo } from '@/types'
  * yields "[object Object]".
  */
 function errorMessage(e: unknown, fallback = 'Noget gik galt.'): string {
-  if (e && typeof e === 'object' && 'message' in e && typeof e.message === 'string') return e.message
-  return e instanceof Error ? e.message : fallback
+  const message =
+    e && typeof e === 'object' && 'message' in e && typeof e.message === 'string'
+      ? e.message
+      : e instanceof Error
+        ? e.message
+        : fallback
+  // The one setup failure worth naming: the tab shipped before the migration
+  // was run. Translated HERE, in the shared helper, because doing it only on
+  // the initial load meant that typing an item and pressing Tilføj before the
+  // table existed showed the raw Postgres text instead.
+  return /admin_todos/.test(message) && /does not exist|schema cache/.test(message)
+    ? 'Listen er ikke sat op endnu. Kør supabase/migrations/0006_admin_todos.sql i Supabase.'
+    : message
 }
 
 /** "malene@…" -> "malene". Null when there was no session to record. */
@@ -54,19 +65,7 @@ export function TodoTab() {
         setTodos(rows)
         setError(null)
       })
-      .catch((e: unknown) => {
-        // Not `e instanceof Error`: supabase-js rejects with a PostgrestError,
-        // a plain object with a `message` field, so that check fell through to
-        // String(e) and the tab showed "[object Object]" instead of the reason.
-        const message = errorMessage(e)
-        // The one setup failure worth naming: the tab shipped before the
-        // migration was run. Say so, rather than showing a raw Postgres error.
-        setError(
-          /admin_todos/.test(message) && /does not exist|schema cache/.test(message)
-            ? 'Listen er ikke sat op endnu. Kør supabase/migrations/0006_admin_todos.sql i Supabase.'
-            : message,
-        )
-      })
+      .catch((e: unknown) => setError(errorMessage(e, 'Kunne ikke hente listen.')))
   }
 
   useEffect(load, [])
