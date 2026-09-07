@@ -1,5 +1,6 @@
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import { CapsuleCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier'
 import { useEffect, useMemo, useRef } from 'react'
 import {
   CanvasTexture,
@@ -248,6 +249,39 @@ const FOOTBALL_DESPAWN = 1.9
  * the shoulders, plus the ball's 0.15 m): being clipped should count, because
  * from the player's side a near miss and a hit look the same at this distance.
  */
+/**
+ * The hit sensor — a capsule roughly Victor's own volume, following him.
+ *
+ * A per-frame distance test is not good enough for a struck ball. At 40 m/s and
+ * a frame clamped to 1/20 s the ball advances two metres between samples, so it
+ * can be in front of him on one frame and past him on the next with no sample
+ * in between — the harder you hit him, the likelier you are to miss. A sensor
+ * is resolved against the ball's SWEPT path by the physics step, so it cannot
+ * be tunnelled.
+ *
+ * It is a sensor, so it never generates a contact force: it cannot bounce,
+ * slow or deflect the ball, and it is not an obstacle. Victor still has no
+ * solid collider anywhere.
+ *
+ * Sized to his body rather than generously: 0.30 m radius against shoulders
+ * about 0.22 m half-width, plus the ball's own 0.15 m, so the effective target
+ * is 0.45 m. Enough that a shot which visually strikes him counts, small
+ * enough that a ball clearly passing beside him does not.
+ */
+const HIT_RADIUS = 0.3
+const HIT_HALF_HEIGHT = 0.55
+const HIT_CENTRE_Y = 0.87
+
+/** How long the "you hit me" beat lasts before he bends to pick it up. */
+const HIT_REACTION_TIME = 0.6
+
+/**
+ * Walk-up range, used ONLY for a ball that is already at rest.
+ *
+ * A moving ball is the sensor's business. Keeping the two apart is what lets
+ * the sensor stay body-sized while he can still stop a comfortable arm's length
+ * from a stationary ball rather than standing on top of it.
+ */
 const CONTACT_RADIUS = 1.0
 const CONTACT_HEIGHT = 1.85
 /**
@@ -288,6 +322,7 @@ const shortest = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
 /** Duration of each timed state, in seconds. */
 const DURATION: Partial<Record<VictorState, number>> = {
   NOTICED_BALL: NOTICE_TIME,
+  HIT_REACTION: HIT_REACTION_TIME,
   PICKING_UP: PICKUP_TIME,
   HOLDING: HOLD_TIME,
   TRANSFORMING: TRANSFORM_TIME,
@@ -425,6 +460,8 @@ export function Victor() {
    */
   const bendRef = useRef<Group>(null)
   const footballRef = useRef<Mesh>(null)
+  /** The hit sensor's body — kinematic, so it follows him without pushing. */
+  const hitSensorRef = useRef<RapierRigidBody>(null)
   const footballTexture = useMemo(makeFootballTexture, [])
   const limbs = useRef<ReturnType<typeof rigLimbs> | null>(null)
   const head = useRef<Object3D | null>(null)
@@ -469,6 +506,10 @@ export function Victor() {
   const focusWeight = useRef(0)
   /** Counts down after a sequence, so he cannot punt twice back to back. */
   const contactCooldown = useRef(0)
+  /** Where the ball struck him, and where it drops to at his feet. */
+  const hitPoint = useRef(new Vector3())
+  const hitDrop = useRef(new Vector3())
+  const hitYaw = useRef(0)
   /** True while he is walking back onto the waypoint graph after a sequence. */
   const rejoining = useRef(false)
 
@@ -510,6 +551,40 @@ export function Victor() {
     return true
   }
 
+  /**
+   * The ball has HIT him. Same sequence, entered one state earlier.
+   *
+   * A struck ball dying instantly at his feet reads as a glitch, so there is a
+   * beat first: the ball stops where it struck him, he recoils and turns to it,
+   * and it drops to the ground — and only then does the pickup start. That beat
+   * is the whole "you hit Victor" message, and it is why this is a state rather
+   * than a flag on PICKING_UP.
+   *
+   * Deterministic on purpose: no probability roll. Someone who deliberately
+   * aims at Victor has earned the payoff every single time.
+   */
+  function registerHit() {
+    if (!stealTuning.hit) return false
+    if (!AMBIENT.includes(victorState.state)) return false
+    if (ballState.holed || victorState.held) return false
+    victorState.hitSerial += 1
+    hitPoint.current.set(ballState.x, Math.max(ballState.y, 0.15), ballState.z)
+    // Drop it just in front of him, on the side it came from.
+    const dx = hitPoint.current.x - pos.current.x
+    const dz = hitPoint.current.z - pos.current.z
+    const len = Math.hypot(dx, dz) || 1
+    hitDrop.current.set(pos.current.x + (dx / len) * 0.38, 0.15, pos.current.z + (dz / len) * 0.38)
+    hitYaw.current = Math.atan2(dx, dz)
+    grabPoint.current.copy(hitDrop.current)
+    // Held from this instant: that is what stops the ball dead, with no
+    // impulse and no bounce, because <Ball> simply goes kinematic.
+    victorState.held = true
+    victorState.inputLocked = true
+    victorState.trigger = 'hit'
+    setVictorState('HIT_REACTION')
+    return true
+  }
+
   /** Puts everything back exactly as it was. Safe to call at any point. */
   function abandonSteal() {
     victorState.held = false
@@ -539,6 +614,7 @@ export function Victor() {
       victor: {
         forceSteal: beginSteal,
         forcePunt: beginPunt,
+        forceHit: registerHit,
         abandon: abandonSteal,
         state: () => victorState.state,
         // The shipped decision function and the shipped tuning record, so the
@@ -548,6 +624,7 @@ export function Victor() {
         snapshot: () => ({
           state: victorState.state,
           trigger: victorState.trigger,
+          hitSerial: victorState.hitSerial,
           elapsed: victorState.elapsed,
           history: [...victorState.history],
           x: pos.current.x,
@@ -605,7 +682,17 @@ export function Victor() {
     // someone who is lining up their shot is the difference between a hazard
     // and a cheat, and the shot they are about to play is their way out.
     if (!inSequence && !ballState.holed && !ballState.aiming && contactCooldown.current <= 0) {
+      // Only a ball at REST is caught this way. A moving one is the sensor's
+      // job, and letting both handle it would make the effective hit box the
+      // 1 m walk-up radius rather than his body.
+      // Gated on the same `chase` switch, because picking up a ball he happens
+      // to be standing next to is the same interest in it that makes him walk
+      // over — turning the chase off should turn both off. Production leaves it
+      // on, so this changes nothing in the game; it is what lets the hit tests
+      // put a ball on the tee without him strolling over and pocketing it.
       const reached =
+        stealTuning.chase &&
+        ballState.speed <= BALL_STATIONARY_SPEED &&
         ballState.y < CONTACT_HEIGHT &&
         Math.hypot(ballState.x - pos.current.x, ballState.z - pos.current.z) < CONTACT_RADIUS
       if (reached) beginPunt()
@@ -718,6 +805,7 @@ export function Victor() {
       const due = DURATION[state]
       if (due !== undefined && elapsed >= due) {
         if (state === 'NOTICED_BALL') setVictorState('APPROACHING_BALL')
+        else if (state === 'HIT_REACTION') setVictorState('PICKING_UP')
         else if (state === 'PICKING_UP') setVictorState('HOLDING')
         else if (state === 'HOLDING') {
           victorState.hidden = true
@@ -844,7 +932,8 @@ export function Victor() {
       // drifting round. Applies ONLY inside the sequence — the ambient turn
       // behaviour below is the approved one and is not touched.
       bodyTau = SEQ_BODY_TAU
-      if (phase === 'APPROACHING_BALL') bodyTarget = travelYaw
+      if (phase === 'HIT_REACTION') bodyTarget = hitYaw.current
+      else if (phase === 'APPROACHING_BALL') bodyTarget = travelYaw
       else if (phase === 'PREPARING_KICK' || phase === 'KICKING' || phase === 'WATCHING') {
         bodyTarget = kickYaw.current
       } else bodyTarget = ballYaw
@@ -898,7 +987,18 @@ export function Victor() {
     let crouch = 0
     let lean = 0
     if (l && sequence) {
-      if (phase === 'PICKING_UP') {
+      if (phase === 'HIT_REACTION') {
+        // A flinch: rocks back, arms come up, then settles — biggest at the
+        // moment of impact and gone by the time he bends down.
+        const u = MathUtils.clamp(phaseElapsed / HIT_REACTION_TIME, 0, 1)
+        const jolt = Math.sin(Math.min(u * 2.2, 1) * Math.PI) * (1 - u * 0.35)
+        lean = -0.30 * jolt
+        crouch = -0.06 * jolt
+        if (l.arms[0]) l.arms[0].rotation.x = -0.9 * jolt
+        if (l.arms[1]) l.arms[1].rotation.x = -1.0 * jolt
+        if (l.legs[0]) l.legs[0].rotation.x = 0.18 * jolt
+        if (l.legs[1]) l.legs[1].rotation.x = -0.1 * jolt
+      } else if (phase === 'PICKING_UP') {
         // Down and back up over the state, with the reach happening at the
         // bottom. sin gives the ease at both ends for free.
         //
@@ -958,6 +1058,14 @@ export function Victor() {
       Math.abs(Math.sin(stride.current)) * BOB_HEIGHT * swingAmp.current + crouch,
       pos.current.z,
     )
+    // The sensor follows him. Kinematic rather than fixed so it can move, and
+    // a sensor so that moving it can never shove the ball.
+    hitSensorRef.current?.setNextKinematicTranslation({
+      x: pos.current.x,
+      y: HIT_CENTRE_Y,
+      z: pos.current.z,
+    })
+
     root.rotation.y = bodyYaw.current
     // A touch of lean into the walk, and a roll with the step.
     root.rotation.z = Math.sin(stride.current) * 0.018 * swingAmp.current
@@ -979,7 +1087,12 @@ export function Victor() {
 
     if (victorState.held) {
       let p: Vector3
-      if (phase === 'PICKING_UP') {
+      if (phase === 'HIT_REACTION') {
+        // Stopped dead where it struck him, then falling to the ground just in
+        // front of him. Quadratic, so it accelerates downward like a real ball.
+        const u = MathUtils.clamp(phaseElapsed / HIT_REACTION_TIME, 0, 1)
+        p = hitPoint.current.clone().lerp(hitDrop.current, MathUtils.clamp(u * u * 1.35, 0, 1))
+      } else if (phase === 'PICKING_UP') {
         const u = MathUtils.clamp(phaseElapsed / PICKUP_TIME, 0, 1)
         // Sits on the grass until his hand actually reaches it at the bottom
         // of the crouch, then comes up with him.
@@ -1081,6 +1194,27 @@ export function Victor() {
           <primitive object={model} />
         </group>
       </group>
+      {/*
+        The hit sensor.
+
+        A SENSOR, not a collider: Rapier resolves intersections for it but never
+        generates a contact force, so it cannot bounce, slow, deflect or block
+        the ball, and it is not an obstacle on the course. Victor still has no
+        solid body of any kind.
+
+        Kinematic rather than fixed because it has to follow him around the
+        garden; a kinematic sensor still pushes nothing.
+      */}
+      <RigidBody
+        ref={hitSensorRef}
+        type="kinematicPosition"
+        colliders={false}
+        sensor
+        onIntersectionEnter={registerHit}
+      >
+        <CapsuleCollider args={[HIT_HALF_HEIGHT, HIT_RADIUS]} sensor />
+      </RigidBody>
+
       {/* The football. Outside <Physics> by virtue of living here rather than
           in <Course>, so it has no collider and cannot be hit, hit anything,
           or become a hazard. It is a temporary object: the golf ball asset is

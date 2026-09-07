@@ -78,21 +78,73 @@ export function Invitation() {
           ))}
         </Reveal>
 
-        <Reveal delayMs={140} className="mt-14 border-t border-green-700/15 pt-14">
-          <p className="font-display text-2xl tracking-wide text-ink-900 sm:text-3xl">
-            {formatDanishDateLong(eventDate).toUpperCase()}
-          </p>
-          <p className="mt-5 text-ink-700">
-            {event.churchName}, {event.churchCity}
-          </p>
-          <p className="mt-4 text-ink-700">
-            Efterfølgende fest på
-            <br />
-            {event.partyAddressLine1}
-            <br />
-            {event.partyPostalCode} {event.partyCity}
-          </p>
-        </Reveal>
+        <div className="relative mt-14 border-t border-green-700/15 pt-14">
+          {/*
+            Sct. Mortens Kirke, printed behind the details.
+
+            Absolutely positioned, so it adds no height to the section, and
+            deliberately wider than the 2xl text column: the drawing is a wide
+            three-quarter view and cropping it to the column width would cut the
+            nave off and leave a tower floating with no building attached.
+
+            The mask is the part that makes it feel printed rather than placed.
+            The artwork already carries a soft alpha halo, but its bottom edge is
+            a hard groundline, and an image that simply stops mid-paragraph reads
+            as a picture behind text. Fading the bottom out lets the drawing sink
+            into the paper under the address.
+          */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center"
+          >
+            <picture>
+              <source srcSet="/images/church-sm.webp" media="(max-width: 639px)" />
+              <img
+                src="/images/church.webp"
+                alt=""
+                /*
+                  Sized by HEIGHT, not width.
+                  The drawing is a wide 3/4 view at roughly 3:2, so setting a
+                  width of "a bit more than the column" made it 600 px tall — it
+                  swallowed the whole section, put the spire alongside the date
+                  rather than above it, and ran out past the Tilmeld button.
+                  Fixing the height instead keeps the whole building in view:
+                  spire above the date, groundline below the address.
+
+                  On a phone it is deliberately not the desktop composition
+                  scaled down — it is shorter relative to the text, so the tower
+                  and nave both still fit across a narrow screen instead of the
+                  sides being cropped away.
+                */
+                className="h-64 w-auto max-w-none opacity-[0.34] select-none sm:h-[30rem] sm:opacity-[0.32]"
+                style={{
+                  maskImage:
+                    'radial-gradient(78% 82% at 50% 44%, #000 46%, rgba(0,0,0,0.5) 72%, transparent 94%)',
+                  WebkitMaskImage:
+                    'radial-gradient(78% 82% at 50% 44%, #000 46%, rgba(0,0,0,0.5) 72%, transparent 94%)',
+                }}
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+          </div>
+
+          <Reveal delayMs={140} className="relative">
+            <p className="font-display text-2xl tracking-wide text-ink-900 sm:text-3xl">
+              {formatDanishDateLong(eventDate).toUpperCase()}
+            </p>
+            <p className="mt-5 text-ink-700">
+              {event.churchName}, {event.churchCity}
+            </p>
+            <p className="mt-4 text-ink-700">
+              Efterfølgende fest på
+              <br />
+              {event.partyAddressLine1}
+              <br />
+              {event.partyPostalCode} {event.partyCity}
+            </p>
+          </Reveal>
+        </div>
 
         <Reveal delayMs={200} className="mt-14">
           <p className="text-ink-700 italic">Vi glæder os til at fejre Victor sammen med jer.</p>

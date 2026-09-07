@@ -36,7 +36,7 @@ export function Billeder() {
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700">
               <Camera size={24} />
             </div>
-            <p className="text-lg text-ink-600">Billeder fra dagen kommer her efter festen.</p>
+            <p className="text-lg text-ink-600">Billederne fra dagen kommer her efter festen. Vi glæder os til at dele dem med jer!</p>
           </Reveal>
         )}
 

@@ -37,7 +37,7 @@ export function Vejret() {
         if (!cancelled) setWeather(result)
       })
       .catch(() => {
-        if (!cancelled) setError('Kunne ikke hente vejrdata lige nu. Prøv igen senere.')
+        if (!cancelled) setError('Vi kunne ikke hente vejret lige nu. Prøv igen om lidt.')
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false)
@@ -57,15 +57,15 @@ export function Vejret() {
           title={`Vejret ${formatDanishDateLong(CONFIRMATION_DATE)}`}
           description={
             weather?.kind === 'forecast'
-              ? 'Den aktuelle vejrudsigt.'
-              : 'Vi kender endnu ikke den præcise vejrudsigt — herunder ser du et historisk gennemsnit for dagen. Den rigtige prognose kommer, når vi nærmer os datoen.'
+              ? 'Sådan ser vejret ud til dagen.'
+              : 'Vi kender ikke den rigtige vejrudsigt endnu, så herunder kan I se, hvordan vejret plejer at være den dag. Den præcise prognose kommer, når vi nærmer os.'
           }
           className="[&_h2]:text-cream-50 [&_p]:text-cream-100/80"
         />
 
         <Reveal className="mt-12 rounded-2xl glass-panel !border-cream-50/15 p-8 sm:p-10">
           {isLoading && (
-            <p className="text-center text-cream-100/70">Henter vejrdata...</p>
+            <p className="text-center text-cream-100/70">Henter vejret...</p>
           )}
 
           {!isLoading && error && <p className="text-center text-cream-100/80">{error}</p>}

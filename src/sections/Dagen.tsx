@@ -13,10 +13,11 @@ export function Dagen() {
       <Container>
         <SectionHeading
           eyebrow="Dagen"
-          title="Sådan kommer dagen til at forløbe"
+          title="Sådan bliver dagen"
           description={
-            'Victor konfirmeres i kirken den 1. maj 2027. Bagefter fejrer vi det sammen ' +
-            'hjemme hos os — festen holdes i vores baghave, hvor vi sætter et stort festtelt op.'
+            'Victor bliver konfirmeret i kirken den 1. maj 2027, og bagefter fejrer vi ' +
+            'hjemme hos os. Vi sætter et stort festtelt op i baghaven, så vi kan holde ' +
+            'fest uanset hvad vejret finder på.'
           }
         />
 

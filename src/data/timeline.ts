@@ -9,7 +9,7 @@ import type { TimelineEvent } from '@/types'
  */
 export const DEFAULT_TIMELINE: TimelineEvent[] = [
   { id: 'kirke', label: 'Kirke', time: '', description: 'Konfirmationen finder sted i kirken.' },
-  { id: 'ankomst', label: 'Ankomst', time: '', description: 'I haven — velkomstdrink og hygge.' },
+  { id: 'ankomst', label: 'Ankomst', time: '', description: 'I haven. Velkomstdrink og hygge.' },
   { id: 'forret', label: 'Forret', time: '', description: '' },
   { id: 'hovedret', label: 'Hovedret', time: '', description: '' },
   { id: 'dessert', label: 'Dessert', time: '', description: '' },

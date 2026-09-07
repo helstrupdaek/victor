@@ -21,6 +21,7 @@ export type VictorState =
   | 'WANDERING'
   | 'IDLE'
   | 'CHASING_BALL'
+  | 'HIT_REACTION'
   | 'NOTICED_BALL'
   | 'APPROACHING_BALL'
   | 'PICKING_UP'
@@ -42,7 +43,7 @@ export const AMBIENT: VictorState[] = ['WANDERING', 'IDLE', 'CHASING_BALL']
 export const ABORTABLE: VictorState[] = ['NOTICED_BALL', 'APPROACHING_BALL']
 /** States in which the sequence is committed and shot input is locked out. */
 export const COMMITTED: VictorState[] = [
-  'PICKING_UP', 'HOLDING', 'TRANSFORMING', 'PREPARING_KICK', 'KICKING', 'WATCHING',
+  'HIT_REACTION', 'PICKING_UP', 'HOLDING', 'TRANSFORMING', 'PREPARING_KICK', 'KICKING', 'WATCHING',
 ]
 
 export const victorState = {
@@ -52,7 +53,9 @@ export const victorState = {
   /** Ordered log of transitions, DEV only, so a test can assert the path. */
   history: [] as VictorState[],
   /** What started the current sequence. DEV/reporting only. */
-  trigger: 'none' as 'none' | 'idle' | 'forced' | 'contact',
+  trigger: 'none' as 'none' | 'idle' | 'forced' | 'contact' | 'hit',
+  /** Bumped every time the hit sensor fires. Lets a test count the events. */
+  hitSerial: 0,
 
   // --- What Victor asks of the ball. Nothing else may touch these. --------
   /** Ball is held: <Ball> goes kinematic and follows heldPos, no impulse. */
@@ -151,6 +154,12 @@ export const stealTuning = {
    * him simply strolling over and punting the ball mid-test.
    */
   chase: true,
+  /**
+   * Whether a direct hit triggers the gag. Off, the sensor still reports the
+   * overlap but Victor ignores it — which is how the "he does not deflect the
+   * ball" test watches a shot pass clean through him.
+   */
+  hit: true,
   probability: STEAL_PROBABILITY,
   idleMin: IDLE_THRESHOLD_MIN,
   idleMax: IDLE_THRESHOLD_MAX,

@@ -41,10 +41,10 @@ function clothingTip(tempC: number, isWet: boolean): string {
       ? 'Tag regntøj og en varm jakke med.'
       : 'Husk en paraply eller en let regnjakke.'
   }
-  if (tempC < 10) return 'Det ser ud til at blive køligt — en varm jakke er en god idé.'
+  if (tempC < 10) return 'Det bliver nok en kølig dag, så tag en varm jakke med.'
   if (tempC < 16) return 'En jakke til aftenen er en god idé.'
   if (tempC < 21) return 'Et let lag, som en striktrøje, er nok.'
-  return 'Det ser ud til at blive varmt — let tøj er nok.'
+  return 'Det bliver nok en varm dag, så let tøj er helt fint.'
 }
 
 interface DailyForecastResponse {

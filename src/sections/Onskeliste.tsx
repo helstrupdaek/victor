@@ -58,7 +58,7 @@ export function Onskeliste() {
           <SectionHeading
             eyebrow="Ønskeliste"
             title="Victors ønskeliste"
-            description="I skal naturligvis ikke tage en gave med — men er I i tvivl, er her nogle idéer. Reservér en gave, så andre ved, den er taget."
+            description="I skal selvfølgelig ikke have gave med, men er I i tvivl, er her et par idéer. Reservér den, I vælger, så de andre kan se, den er taget."
           />
           <div className="mb-1 flex flex-shrink-0 gap-1 rounded-full border border-ink-900/10 bg-cream-50 p-1">
             <button
@@ -85,7 +85,7 @@ export function Onskeliste() {
         </div>
 
         {!isLoading && items.length === 0 && (
-          <p className="mt-12 text-ink-600">Ønskelisten er tom lige nu — kig forbi igen senere.</p>
+          <p className="mt-12 text-ink-600">Der er ikke noget på ønskelisten endnu. Kig forbi igen om lidt!</p>
         )}
 
         <div

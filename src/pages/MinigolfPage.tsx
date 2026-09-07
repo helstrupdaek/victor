@@ -51,7 +51,7 @@ export function MinigolfPage() {
         )}
       </div>
       <p className="mt-4 text-center text-sm text-ink-600">
-        Victors have er blevet til en minigolfbane. Pas på Victor — rammer du ham,
+        Victors have er blevet til en minigolfbane. Pas på Victor! Rammer du ham,
         sparker han bolden ud af haven.
       </p>
     </div>

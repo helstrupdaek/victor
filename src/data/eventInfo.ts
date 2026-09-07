@@ -19,8 +19,11 @@ export const DEFAULT_EVENT_INFO: EventInfo = {
   partyCity: 'Randers NV',
   rsvpDeadline: '2026-12-01',
   hosts: 'Mark, Malene & Victor',
+  // Kept character-for-character in step with the stored `event_info` value in
+  // Supabase, which is what the live site actually renders; this is only the
+  // fallback for a fresh database. Editing it from /admin overrides this.
   invitationBody:
-    'Den 1. maj 2027 er en helt særlig dag for Victor, og vi håber, at I har lyst til at fejre den sammen med os.\n\n' +
-    'Victor bliver konfirmeret i Sct. Mortens Kirke i Randers, og bagefter fortsætter vi festen hjemme hos os på Verdisvej 9, hvor vi dækker op til fest i haven.\n\n' +
-    'Vi glæder os til en dag med god mad, kolde drikke og de mennesker, Victor holder af.',
+    'Den 1. maj 2027 er en stor dag for Victor, og vi håber virkelig, at I har lyst til at fejre den sammen med os.\n\n' +
+    'Victor bliver konfirmeret i Sct. Mortens Kirke i Randers, og bagefter fortsætter festen hjemme hos os på Verdisvej 9, hvor vi dækker op ude i haven.\n\n' +
+    'Der bliver god mad, kolde drikke, musik i teltet og en have fuld af de mennesker, Victor holder allermest af. Vi glæder os helt vildt til at se jer!',
 }
