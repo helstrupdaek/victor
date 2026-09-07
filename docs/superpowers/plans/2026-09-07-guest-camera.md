@@ -111,9 +111,13 @@ select
   exists (select 1 from public.site_settings where key = 'gallery_order') as has_order;
 ```
 
-- [ ] **Step 2: Ask the owner to run it, then verify from here**
+- [ ] **Step 2: Ask the owner to run it in Supabase**
 
-The migration cannot be applied from this machine (no psql, no Supabase CLI; the service key only reaches PostgREST). Stop and ask the owner to run the file in the Supabase SQL editor and report the four-column result. Then verify from the outside — this must return `200` and a row shape including `source` and `is_pinned`:
+The migration cannot be applied from this machine (no psql, no Supabase CLI; the service key only reaches PostgREST). Stop and ask the owner to paste **the SQL file from Step 1, and nothing else,** into the Supabase SQL editor, run it, and report the four-column result.
+
+- [ ] **Step 3: Verify from the repo (terminal, NOT the SQL editor)**
+
+This block is a shell command run from the repo directory on this machine. It is not SQL and must never be pasted into Supabase — pasting it there fails with `syntax error at or near "export"`, which happened once. It must print `HTTP 200` (PostgREST returns 400 for a column it does not know, so 200 on this select proves the columns exist) and both settings rows:
 
 ```bash
 export $(grep -E '^(VITE_SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY)=' .env | xargs)
@@ -123,9 +127,9 @@ curl -s "$VITE_SUPABASE_URL/rest/v1/site_settings?select=key,value&key=in.(guest
   -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
 ```
 
-Expected: `HTTP 200`, and both settings rows present with `enabled: false` and `direction: "newest"`.
+Expected: `HTTP 200`, and both settings rows present with `enabled: false` and `direction: "newest"`. An empty `[]` for the photos query is fine: it means there are no photos yet, not that the columns are missing.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add supabase/migrations/0007_guest_camera.sql
