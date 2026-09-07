@@ -1,4 +1,5 @@
 import type { VenueLocation, WeatherSnapshot } from '@/types'
+import { fetchWithRetry, mapWithConcurrency } from './pool'
 
 /**
  * Open-Meteo is free and keyless, so the weather section can hit it
@@ -117,7 +118,9 @@ export async function fetchSeasonalOutlook(
     (_, i) => currentYear - 1 - i,
   ).filter((year) => year < currentYear)
 
-  const requests = years.map(async (year) => {
+  // Two requests at a time with one retry: eight at once gets 429s from
+  // Open-Meteo's archive, and every lost year silently skews the average.
+  const fetchYear = async (year: number) => {
     const date = new Date(year, targetDate.getMonth(), targetDate.getDate())
     const isoDate = toIsoDate(date)
     const url = new URL(ARCHIVE_ENDPOINT)
@@ -131,7 +134,7 @@ export async function fetchSeasonalOutlook(
     url.searchParams.set('start_date', isoDate)
     url.searchParams.set('end_date', isoDate)
 
-    const response = await fetch(url.toString())
+    const response = await fetchWithRetry(url.toString())
     if (!response.ok) return null
     const data = (await response.json()) as ArchiveDayResponse
     if (data.daily.time.length === 0) return null
@@ -141,9 +144,9 @@ export async function fetchSeasonalOutlook(
       windKph: data.daily.windspeed_10m_max[0],
       weatherCode: data.daily.weathercode[0],
     }
-  })
+  }
 
-  const results = (await Promise.all(requests)).filter(
+  const results = (await mapWithConcurrency(years, 2, fetchYear)).filter(
     (r): r is NonNullable<typeof r> => r !== null,
   )
 
