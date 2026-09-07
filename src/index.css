@@ -3,6 +3,7 @@
 @theme {
   --font-display: 'Fraunces', 'Iowan Old Style', ui-serif, Georgia, serif;
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-hand: 'Caveat', 'Bradley Hand', 'Segoe Print', cursive;
 
   /* Warm off-white ground, inspired by linen / clubhouse paper */
   --color-cream-50: #fdfcf9;
