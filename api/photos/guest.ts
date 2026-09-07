@@ -170,9 +170,13 @@ async function caption(req: Req, res: ServerResponse): Promise<void> {
   }
 
   const supabase = getSupabaseAdmin()
-  // The id is the capability: it is a UUID this route issued to the phone that
-  // took the photo, nobody else has it, and it cannot be enumerated. Only
-  // guest rows, and only the two text fields — never published/pinned/delete.
+  // The id alone is not a secret: anon can select every published row, guest
+  // photos included, so anyone on the wall can read this id off the network
+  // tab. What actually guards this write is that it only ever succeeds once,
+  // and only within 30 minutes of the upload — the phone that just took the
+  // photo is the only caller that can win the race. Only guest rows, and
+  // only the two text fields — never published/pinned/delete.
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
   const { data, error } = await supabase
     .from('photos')
     .update({
@@ -181,6 +185,9 @@ async function caption(req: Req, res: ServerResponse): Promise<void> {
     })
     .eq('id', id)
     .eq('source', 'guest')
+    .is('caption', null)
+    .is('guest_name', null)
+    .gt('created_at', thirtyMinutesAgo)
     .select('id')
   if (error) {
     console.error('[photos/guest] caption update failed:', error)
