@@ -6,17 +6,22 @@ import type { GalleryDirection } from '@/types'
  * anon client on /kamera and Billeder can read them; writes go through
  * updateSiteSetting, which is admin-only under RLS.
  *
- * Reading is deliberately forgiving: a missing or malformed row means "off"
- * and "newest", never an exception, because these are read on the public
- * site where the right failure mode is the safe default.
+ * Reading is deliberately forgiving: a missing row, a malformed value, or a
+ * failed query all mean "off" and "newest", never an exception, because
+ * these are read on the public site where the right failure mode is the
+ * safe default.
  */
 
 interface GuestCameraSetting { enabled: boolean }
 interface GalleryOrderSetting { direction: GalleryDirection }
 
 export async function fetchGuestCameraEnabled(): Promise<boolean> {
-  const value = await fetchSiteSetting<GuestCameraSetting>('guest_camera', { enabled: false })
-  return value?.enabled === true
+  try {
+    const value = await fetchSiteSetting<GuestCameraSetting>('guest_camera', { enabled: false })
+    return value?.enabled === true
+  } catch {
+    return false
+  }
 }
 
 export function setGuestCameraEnabled(enabled: boolean): Promise<void> {
@@ -24,8 +29,12 @@ export function setGuestCameraEnabled(enabled: boolean): Promise<void> {
 }
 
 export async function fetchGalleryOrder(): Promise<GalleryDirection> {
-  const value = await fetchSiteSetting<GalleryOrderSetting>('gallery_order', { direction: 'newest' })
-  return value?.direction === 'oldest' ? 'oldest' : 'newest'
+  try {
+    const value = await fetchSiteSetting<GalleryOrderSetting>('gallery_order', { direction: 'newest' })
+    return value?.direction === 'oldest' ? 'oldest' : 'newest'
+  } catch {
+    return 'newest'
+  }
 }
 
 export function setGalleryOrder(direction: GalleryDirection): Promise<void> {
