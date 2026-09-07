@@ -2259,7 +2259,8 @@ if (run('D')) {
     const c = ${card()}
     const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
     const cap = c.querySelector('input[aria-label="Tekst"]')
-    set.call(cap, 'ZZ edited by host'); cap.dispatchEvent(new Event('input', { bubbles: true })); cap.blur(); cap.dispatchEvent(new Event('blur'))
+    // Focus first: React 19 binds onBlur to focusout, which blur() only fires on a focused element.
+    cap.focus(); set.call(cap, 'ZZ edited by host'); cap.dispatchEvent(new Event('input', { bubbles: true })); cap.blur()
   })()`)
   await sleep(2000)
   const edited = await fetch(`${SB}/rest/v1/photos?id=eq.${seeded}&select=caption`, { headers: H }).then((r) => r.json())
