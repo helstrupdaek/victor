@@ -894,6 +894,12 @@ export function Victor() {
       ])
       wantSpeed = APPROACH_SPEED
     }
+    // DEV-only freeze, for the hit tests. Production never sets it.
+    if (stealTuning.freeze) {
+      destination = null
+      wantSpeed = 0
+      speed.current = 0
+    }
     speed.current += (wantSpeed - speed.current) * (1 - Math.exp(-dt / ACCEL_TAU))
 
     let travelYaw = bodyYaw.current

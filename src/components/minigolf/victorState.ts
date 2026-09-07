@@ -155,6 +155,20 @@ export const stealTuning = {
    */
   chase: true,
   /**
+   * Holds Victor still. DEV/testing only; production never sets it.
+   *
+   * The hit tests have to put a ball through a target 0.9 m wide from up to
+   * fifteen metres away, and the shot is airborne for a second or two while his
+   * idle pause is only 2.5-6 s — so he routinely walked out of the way after the
+   * aim was taken. A miss and a broken sensor look identical to the assertion,
+   * which is what made those tests flaky rather than wrong.
+   *
+   * Freezing him removes the only non-deterministic thing in the setup. The
+   * tests still freeze him at a spot he WALKED to rather than his spawn, so
+   * "the sensor follows him" is exercised either way.
+   */
+  freeze: false,
+  /**
    * Whether a direct hit triggers the gag. Off, the sensor still reports the
    * overlap but Victor ignores it — which is how the "he does not deflect the
    * ball" test watches a shot pass clean through him.
