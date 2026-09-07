@@ -23,7 +23,12 @@ export class GuestCameraOff extends Error {
  * rotation first, so portrait shots come out upright rather than sideways.
  */
 export async function resizeForUpload(file: File): Promise<{ blob: Blob; width: number; height: number }> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  } catch {
+    throw new Error('Billedet kunne ikke læses. Prøv et andet.')
+  }
   const { width, height } = fitWithin(bitmap.width, bitmap.height, MAX_SIDE)
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -44,15 +49,20 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
 
 /** Uploads the resized photo. Resolves to the photo's id for the caption step. */
 export async function uploadGuestPhoto(photo: { blob: Blob; width: number; height: number }): Promise<string> {
-  const response = await fetch('/api/photos/guest', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'image/jpeg',
-      'X-Image-Width': String(photo.width),
-      'X-Image-Height': String(photo.height),
-    },
-    body: photo.blob,
-  })
+  let response: Response
+  try {
+    response = await fetch('/api/photos/guest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/jpeg',
+        'X-Image-Width': String(photo.width),
+        'X-Image-Height': String(photo.height),
+      },
+      body: photo.blob,
+    })
+  } catch {
+    throw new Error('Ingen forbindelse. Tjek netværket og prøv igen.')
+  }
   if (response.status === 403) throw new GuestCameraOff()
   if (!response.ok) throw new Error(await errorMessage(response, 'Billedet kunne ikke sendes. Prøv igen.'))
   const body = (await response.json()) as { id: string }
@@ -60,10 +70,15 @@ export async function uploadGuestPhoto(photo: { blob: Blob; width: number; heigh
 }
 
 export async function saveGuestCaption(id: string, caption: string, guestName: string): Promise<void> {
-  const response = await fetch('/api/photos/guest', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, caption, guest_name: guestName }),
-  })
+  let response: Response
+  try {
+    response = await fetch('/api/photos/guest', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, caption, guest_name: guestName }),
+    })
+  } catch {
+    throw new Error('Ingen forbindelse. Tjek netværket og prøv igen.')
+  }
   if (!response.ok) throw new Error(await errorMessage(response, 'Teksten kunne ikke gemmes. Prøv igen.'))
 }
