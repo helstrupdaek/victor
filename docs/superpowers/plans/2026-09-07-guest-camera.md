@@ -1201,7 +1201,14 @@ function hash(s: string): number {
   // djb2, kept as an unsigned 32-bit integer.
   let h = 5381
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
-  return h
+  // MurmurHash3 finaliser: spreads a one-character change across all 32
+  // bits, so ids that differ by one character never share a tilt.
+  h ^= h >>> 16
+  h = Math.imul(h, 0x85ebca6b) >>> 0
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2ae35) >>> 0
+  h ^= h >>> 16
+  return h >>> 0
 }
 
 /** Maps a slice of the hash to [-limit, +limit], rounded to one decimal. */
