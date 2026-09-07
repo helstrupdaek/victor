@@ -78,6 +78,13 @@ export function Lightbox({
         className="max-h-[85vh] max-w-full rounded-lg object-contain shadow-soft"
         onClick={(event) => event.stopPropagation()}
       />
+
+      {(photo.caption || photo.guest_name) && (
+        <p className="font-hand absolute right-4 bottom-6 left-4 text-center text-2xl text-cream-50" onClick={(e) => e.stopPropagation()}>
+          {photo.caption}
+          {photo.guest_name && <span className="ml-2 text-cream-50/70">{photo.caption ? `— ${photo.guest_name}` : photo.guest_name}</span>}
+        </p>
+      )}
     </div>
   )
 }
