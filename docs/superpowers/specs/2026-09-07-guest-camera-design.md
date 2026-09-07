@@ -132,8 +132,13 @@ One Vercel function, service key, two methods. Same skeleton as
 
 ### `POST /api/photos/guest`
 
-Multipart body: `file` (the resized JPEG), optional `caption`, optional
-`guest_name`. In order:
+The resized JPEG **as the raw request body** with `Content-Type: image/jpeg`,
+and the phone-measured dimensions as `X-Image-Width` / `X-Image-Height`
+headers. Not multipart: parsing multipart on Vercel needs a dependency, a raw
+body needs none, and the text already has its own `PATCH` below — so the
+upload carries no caption or name at all. Vercel hands the body to the
+function pre-read as a `Buffer`; the local dev plugin hands a stream; the route
+reads either. In order:
 
 1. **Switch.** Read `site_settings.guest_camera` fresh from the database. If
    not enabled → `403 { error: 'Kameraet er slukket.' }`. The UI hiding the
@@ -145,13 +150,13 @@ Multipart body: `file` (the resized JPEG), optional `caption`, optional
    is already a server secret; no new env var. The client IP is
    `x-forwarded-for`'s first entry, which Vercel sets.
 3. **Validate.** Content type must be `image/jpeg`, `image/png` or
-   `image/webp` (`415` otherwise); size ≤ **4 MB** (`413`); caption and name
-   are trimmed, internal whitespace collapsed, control characters stripped —
-   the same sanitiser as the minigolf player name — and truncated to 120 / 30.
+   `image/webp` (`415` otherwise); size ≤ **4 MB** (`413`); the two dimension
+   headers must be positive integers (`400` otherwise).
 4. **Store.** Upload to bucket `gallery` at `guest/<uuid>.jpg` with
    `cacheControl: '31536000'`. Insert the `photos` row: `source = 'guest'`,
-   `is_published = true`, `is_pinned = false`, width/height as reported by the
-   client (the phone measured the canvas), caption/name, `uploader_hash`.
+   `is_published = true`, `is_pinned = false`, width/height from the headers
+   (the phone measured the canvas), `caption` and `guest_name` null until the
+   `PATCH`, `uploader_hash`.
 5. Respond `201 { ok: true, id }`.
 
 ### `PATCH /api/photos/guest`
