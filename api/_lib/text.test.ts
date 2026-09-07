@@ -21,3 +21,7 @@ test('empty, whitespace-only and non-strings become null', () => {
 test('keeps Danish letters and emoji', () => {
   assert.equal(sanitizeText('Skål for Victor 🎉', 120), 'Skål for Victor 🎉')
 })
+
+test('strips real control characters, not just whitespace ones', () => {
+  assert.equal(sanitizeText('A\u0000B\u001bC\u007fD', 120), 'ABCD')
+})
