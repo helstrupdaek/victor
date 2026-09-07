@@ -6,10 +6,14 @@ import { MinigolfTab } from './tabs/MinigolfTab'
 import { PracticalInfoTab } from './tabs/PracticalInfoTab'
 import { RsvpTab } from './tabs/RsvpTab'
 import { TimelineTab } from './tabs/TimelineTab'
+import { TodoTab } from './tabs/TodoTab'
 import { WishlistTab } from './tabs/WishlistTab'
 
 const TABS = [
   { id: 'rsvp', label: 'Tilmeldinger', component: RsvpTab },
+  // Second, not last: this is the tab the two of you will open most often
+  // between now and May.
+  { id: 'todo', label: 'To-do', component: TodoTab },
   { id: 'event', label: 'Begivenhed', component: EventInfoTab },
   { id: 'wishlist', label: 'Ønskeliste', component: WishlistTab },
   { id: 'gallery', label: 'Billeder', component: GalleryTab },

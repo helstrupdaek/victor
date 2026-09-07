@@ -125,6 +125,19 @@ export interface ReservedGiftsSummary {
   titles: string[]
 }
 
+/** One line on the hosts' shared to-do list in /admin. */
+export interface AdminTodo {
+  id: string
+  created_at: string
+  title: string
+  done: boolean
+  done_at: string | null
+  /** Email of whoever added it; null on rows written without a session. */
+  created_by: string | null
+  /** Email of whoever ticked it off; cleared again when un-ticked. */
+  done_by: string | null
+}
+
 export interface MinigolfScore {
   id: string
   created_at: string
