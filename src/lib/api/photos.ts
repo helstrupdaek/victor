@@ -23,11 +23,19 @@ function orderPhotos(photos: Omit<Photo, 'url'>[], direction: GalleryDirection) 
   })
 }
 
+// Every column of `photos` except uploader_hash — an HMAC of the uploader's
+// IP kept only for the guest-upload rate limit, never meant for a public
+// read. Naming columns instead of select('*') keeps it out of this response
+// even before migration 0008 (supabase/migrations/0008_photos_anon_columns.sql)
+// is applied to revoke anon's column-level access at the database itself.
+const PUBLIC_PHOTO_COLUMNS =
+  'id, created_at, storage_path, caption, width, height, sort_order, is_published, source, guest_name, is_pinned'
+
 export async function fetchPublishedPhotos(direction: GalleryDirection = 'newest'): Promise<Photo[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
       .from('photos')
-      .select('*')
+      .select(PUBLIC_PHOTO_COLUMNS)
       .eq('is_published', true)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: direction === 'oldest' })
