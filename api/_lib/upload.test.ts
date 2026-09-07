@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
-import { BodyTooLarge, clientIp, readRawBody, uploaderHash } from './upload.ts'
+import { BodyTooLarge, clientIp, looksLikeImage, readRawBody, uploaderHash } from './upload.ts'
 
 const stream = (chunks: string[]) => Readable.from(chunks.map((c) => Buffer.from(c)))
 
@@ -47,4 +47,28 @@ test('uploader hash is stable, secret-dependent, 32 hex chars', () => {
   assert.equal(a, uploaderHash('1.2.3.4', 'secret'))
   assert.notEqual(a, uploaderHash('1.2.3.4', 'other'))
   assert.notEqual(a, uploaderHash('1.2.3.5', 'secret'))
+})
+
+const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0])
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+const WEBP_HEADER = Buffer.from([
+  0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+])
+
+test('looksLikeImage accepts a minimal JPEG/PNG/WebP header for its own type', () => {
+  assert.equal(looksLikeImage(JPEG_HEADER, 'image/jpeg'), true)
+  assert.equal(looksLikeImage(PNG_HEADER, 'image/png'), true)
+  assert.equal(looksLikeImage(WEBP_HEADER, 'image/webp'), true)
+})
+
+test('looksLikeImage rejects plain text', () => {
+  assert.equal(looksLikeImage(Buffer.from('hello world, not an image'), 'image/jpeg'), false)
+})
+
+test('looksLikeImage rejects a JPEG header labelled png', () => {
+  assert.equal(looksLikeImage(JPEG_HEADER, 'image/png'), false)
+})
+
+test('looksLikeImage rejects a body shorter than 12 bytes', () => {
+  assert.equal(looksLikeImage(Buffer.from([0xff, 0xd8, 0xff]), 'image/jpeg'), false)
 })

@@ -54,7 +54,13 @@ export async function uploadGuestPhoto(photo: { blob: Blob; width: number; heigh
     response = await fetch('/api/photos/guest', {
       method: 'POST',
       headers: {
-        'Content-Type': 'image/jpeg',
+        // Vercel's Node runtime only exposes req.body as a Buffer for
+        // application/octet-stream; for image/jpeg it drains the stream
+        // before the handler runs and leaves nothing to read. Sending the
+        // body as octet-stream and naming the real type in a header keeps
+        // the upload readable in production. See api/photos/guest.ts.
+        'Content-Type': 'application/octet-stream',
+        'X-Image-Type': 'image/jpeg',
         'X-Image-Width': String(photo.width),
         'X-Image-Height': String(photo.height),
       },

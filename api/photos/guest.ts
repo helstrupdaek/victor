@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { readJsonBody, sendJson } from '../_lib/http.js'
 import { getSupabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { sanitizeText } from '../_lib/text.js'
-import { BodyTooLarge, clientIp, readRawBody, uploaderHash } from '../_lib/upload.js'
+import { BodyTooLarge, clientIp, looksLikeImage, readRawBody, uploaderHash } from '../_lib/upload.js'
 
 /**
  * The guest camera's only write path.
@@ -78,8 +78,19 @@ async function upload(req: Req, res: ServerResponse): Promise<void> {
     return
   }
 
+  // On Vercel the Node helper drains the body before the handler runs and
+  // only exposes it as req.body (a Buffer) for application/octet-stream —
+  // for a real image/jpeg content type it leaves req.body undefined and the
+  // stream already consumed, so the route would read zero bytes there. The
+  // phone therefore sends octet-stream and names the real image type in
+  // X-Image-Type; a direct image/jpeg (or png/webp) POST, e.g. from curl or
+  // the local dev plugin, is still accepted as-is.
   const contentType = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase()
-  if (!ACCEPTED.has(contentType)) {
+  const imageType =
+    contentType === 'application/octet-stream'
+      ? String(req.headers['x-image-type'] ?? 'image/jpeg').toLowerCase()
+      : contentType
+  if (!ACCEPTED.has(imageType)) {
     sendJson(res, 415, { ok: false, error: 'Det skal være et billede (JPEG, PNG eller WebP).' })
     return
   }
@@ -105,11 +116,15 @@ async function upload(req: Req, res: ServerResponse): Promise<void> {
     sendJson(res, 400, { ok: false, error: 'Der kom ikke noget billede med.' })
     return
   }
+  if (!looksLikeImage(bytes, imageType)) {
+    sendJson(res, 415, { ok: false, error: 'Det skal være et billede (JPEG, PNG eller WebP).' })
+    return
+  }
 
-  const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'
+  const ext = imageType === 'image/png' ? 'png' : imageType === 'image/webp' ? 'webp' : 'jpg'
   const path = `guest/${randomUUID()}.${ext}`
   const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, bytes, {
-    contentType,
+    contentType: imageType,
     cacheControl: '31536000',
     upsert: false,
   })
