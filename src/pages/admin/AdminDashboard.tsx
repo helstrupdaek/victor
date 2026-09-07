@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { signOutAdmin } from '@/lib/api/auth'
 import { EventInfoTab } from './tabs/EventInfoTab'
 import { GalleryTab } from './tabs/GalleryTab'
+import { MinigolfTab } from './tabs/MinigolfTab'
 import { PracticalInfoTab } from './tabs/PracticalInfoTab'
 import { RsvpTab } from './tabs/RsvpTab'
 import { TimelineTab } from './tabs/TimelineTab'
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'gallery', label: 'Billeder', component: GalleryTab },
   { id: 'practical', label: 'Praktisk', component: PracticalInfoTab },
   { id: 'timeline', label: 'Tidsplan', component: TimelineTab },
+  { id: 'minigolf', label: 'Minigolf', component: MinigolfTab },
 ] as const
 
 export function AdminDashboard() {
