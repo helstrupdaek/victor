@@ -1,4 +1,4 @@
-import type { ElementType, ReactNode } from 'react'
+import { createElement, type ElementType, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export function Container({
@@ -10,5 +10,5 @@ export function Container({
   className?: string
   as?: ElementType
 }) {
-  return <Tag className={cn('mx-auto w-full max-w-6xl px-6 sm:px-8', className)}>{children}</Tag>
+  return createElement(Tag, { className: cn('mx-auto w-full max-w-6xl px-6 sm:px-8', className) }, children)
 }

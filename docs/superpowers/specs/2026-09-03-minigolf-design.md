@@ -27,17 +27,115 @@ announced at the party.
 
 ## Gameplay
 
-- **Course**: inspired by the house photo without trying to be accurate — tee
-  near the road/driveway, a bend around a blocky stand-in for the house, cup
-  somewhere in the garden, one simple obstacle (e.g. a cylinder "tree") to
-  bank around.
-- **Boundaries**: invisible walls around the entire play area so an errant
-  shot bounces back rather than needing out-of-bounds handling.
+- **Course** *(revised after seeing real reference photos of the actual
+  garden — supersedes the original generic "house + one tree" layout)*:
+  modeled on the real shape of the party garden, still simple/stylized
+  blocky geometry, not photorealistic. Tee starts on the grass by the
+  carport (near where the car sits). The path runs along the lawn strip
+  beside the driveway/hedge, opens into the main lawn (a long, hedge-ringed
+  open area with the house along one edge), passes a round clipped bush
+  (an obstacle to bank around — modeled as a sphere rather than the
+  original thin cylinder "tree", since the real feature is a round shrub),
+  and finishes at a cup in the corner near the apple tree. Still **one
+  hole** — this is a longer, more scenic single path through the real
+  garden's layout, not multiple holes.
+- **Boundaries**: walls around the entire play area so an errant shot
+  bounces back rather than needing out-of-bounds handling. Also a
+  Y-position watchdog (reset the ball to the tee if it ever ends up below
+  the floor) and continuous collision detection on the ball, as defense in
+  depth against fast shots tunneling through thin colliders — discovered
+  as a real, reproducible bug during implementation playtesting.
+- **Visual style** *(added after the user shared a reference screenshot of
+  a polished mobile minigolf game — supersedes the earlier "flat green
+  ground, invisible walls" look)*: the fairway uses a two-tone checkered
+  texture (alternating light/dark green squares, like mown-lawn stripes)
+  rather than a flat color. Boundary walls are **visible**, but styled as
+  the real garden's tall trimmed **hedge** (dark green, textured) — NOT
+  the reference screenshot's generic stone/brick, since the whole point of
+  this course is that guests recognize it as the actual party garden.
+  Along one edge, add a recognizable stand-in for the real **terrace/deck
+  and pavilion** (the wooden pergola with the outdoor kitchen/dining
+  area) as scenery — simple stylized boxes, not detailed, but positioned
+  and colored (dark wood tones) so it reads as "the terrace" to anyone
+  who's been there. A dashed circular ring around the ball indicates aim
+  range while idle/dragging, in addition to the directional aim arrow. A
+  simple distance-to-hole readout is shown in the HUD.
+- **More real-yard obstacles** *(user's own follow-up, referring back to
+  the same reference photos already used for the course layout)*: beyond
+  the round bush and decorative apple tree already speced, add a few more
+  recognizable real-yard items as obstacles scattered through the course —
+  the robot lawnmower (small dark box), one or two flower/planter baskets
+  (the corten-steel planter boxes and the wicker basket seen in the
+  photos), and additional trimmed bushes/hedge-corner shapes. Keep these
+  simple stylized geometry like everything else — the goal is "oh, that's
+  our robot mower" recognition, not detailed modeling. Don't let them
+  crowd the fairway or make the hole meaningfully harder to reach; they're
+  flavor/scenery-as-obstacle in the spirit of minigolf, not a difficulty
+  escalation.
+- **Concept-art reference confirmation** *(user shared a rendered concept
+  image of the desired final look)*: confirms and extends the visual-
+  style direction above. Two more concrete elements to add: a low stone
+  curb bordering the fairway path itself (distinct from, and inside, the
+  taller outer hedge boundary), and one or two sand-trap-style flat tan
+  patches as decorative ground detail (not necessarily physics obstacles
+  — a texture/color patch is enough). Also add simple text signage at the
+  tee ("START") and hole ("HOLE") if easy to render with what's already
+  in the stack (e.g. drei's `Text` or `Html` helpers) — skip it if it
+  adds real complexity, it's a nice-to-have, not a requirement.
+  **Explicitly out of scope**: matching the reference image's
+  photorealistic rendering quality (real textures, materials, lighting,
+  shadows) — that's a fundamentally different, much larger effort than
+  "simple stylized geometry," and stays out of scope for this feature.
+  The reference is for layout/element ideas, not a rendering-fidelity
+  target.
+- **Art direction, final round** *(user clarified their concept-art reference
+  is not a photorealism target but a specific, well-defined stylized 3D-game
+  look, after an earlier draft of this spec incorrectly scoped "photorealism"
+  out in favor of plain flat-shaded geometry)*: **Stylized low-poly 3D casual
+  game environment** — bright saturated colors, simplified/rounded geometry,
+  clean PBR materials that still react convincingly to light, soft ambient
+  occlusion and soft directional sunlight, rounded/slightly exaggerated
+  proportions, an elevated isometric-ish default camera angle, "polished
+  mobile minigolf/tycoon game" aesthetic, playful but still architecturally
+  recognizable as the real garden — explicitly **no photorealism** (no real
+  textures/photo materials, no downloaded image assets). Concretely, this
+  means: rounded-corner geometry (e.g. drei's `RoundedBox`) in place of sharp
+  boxes wherever practical (walls, terrace, planters, curb, mower); soft
+  ambient/fill lighting plus a soft-shadowed sun light (no external HDR/CDN
+  environment maps — keep the existing no-downloaded-assets constraint from
+  the checkered-fairway texture, and rely on hemisphere + directional light
+  plus soft contact shadows for the "ambient occlusion" feel instead); more
+  saturated material colors with tuned roughness for a "clean PBR" look
+  rather than flat matte colors; a refined default camera angle read as
+  isometric/elevated while keeping the existing player-controllable orbit.
+  This is a materials/geometry/lighting/camera-default pass only — it must
+  not change collider shapes/sizes, physics tuning, or any gameplay logic.
+- **Signage bugfix**: independent review of the previous visual-polish pass
+  found the START/HOLE text signage renders mirrored/backwards even from the
+  untouched default camera (`rotation={[-Math.PI/2,0,0]}` on both `<Text>`
+  elements in `Course.tsx`) — fix the rotation and re-verify against the
+  actual default camera, not just the transform on paper.
+- **What NOT to copy from the reference screenshot**: no par/currency/
+  health-bar HUD widgets, no keyboard controls (drag-only, per the
+  original spec) — that screenshot is a style/texture reference for the
+  fairway checkering, wall visibility, and aim-ring UI only, not a
+  feature checklist, and the actual garden's own features (hedge,
+  terrace, pavilion, robot mower, planters) take priority over the
+  reference's generic tropical look wherever the two would conflict.
 - **Controls**: click-and-drag from the ball — drag direction sets aim
   (opposite the drag), drag distance sets power, release to shoot. Identical
   behavior for mouse and touch.
-- **Camera**: fixed, angled overhead view showing the whole hole at once. No
-  camera-follow logic.
+- **Aim indicator** *(added after implementation playtesting showed the
+  fixed camera made aiming genuinely hard to verify/play)*: a 3D arrow
+  anchored at the ball, visible while dragging, pointing in the current aim
+  direction. Its color interpolates green → yellow → red as drag distance
+  approaches `MAX_DRAG_DISTANCE`, giving the player direct visual feedback
+  on shot power before releasing.
+- **Camera**: *(revised from the original fixed-angle-only design)*
+  player-controllable orbit (drag to rotate around the course, scroll/pinch
+  to zoom), via `@react-three/drei`'s `OrbitControls`, so the player can
+  reposition their view to line up a shot — rather than a single fixed
+  angle. Starts at a reasonable default angle showing the whole course.
 - **Timing**: stopwatch starts on the first shot (not on page load) and stops
   the instant the ball sinks. Shot count increments per swing.
 

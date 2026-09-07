@@ -1,4 +1,4 @@
-import type { ElementType, ReactNode } from 'react'
+import { createElement, type ElementType, type ReactNode } from 'react'
 import { useInViewport } from '@/hooks/useInViewport'
 import { cn } from '@/lib/utils'
 
@@ -15,20 +15,18 @@ export function Reveal({
 }) {
   const { ref, isVisible } = useInViewport<HTMLElement>({ once: true, threshold: 0.15 })
 
-  return (
-    <Tag
-      // `as` makes this component polymorphic, so its concrete DOM element
-      // type can't be known statically — safe in practice since every host
-      // tag accepts a ref to its own HTMLElement.
-      ref={ref as never}
-      className={cn(
-        'transition-[opacity,transform] duration-700 ease-out motion-reduce:transition-none',
-        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0',
-        className,
-      )}
-      style={{ transitionDelay: isVisible ? `${delayMs}ms` : '0ms' }}
-    >
-      {children}
-    </Tag>
-  )
+  // `as` makes this component polymorphic, so its concrete DOM element
+  // type can't be known statically — safe in practice since every host
+  // tag accepts a ref to its own HTMLElement. We use createElement instead of
+  // JSX syntax to avoid TypeScript's generic JSX resolution collapsing to `never`
+  // when @react-three/fiber augments JSX.IntrinsicElements.
+  return createElement(Tag, {
+    ref: ref as never,
+    className: cn(
+      'transition-[opacity,transform] duration-700 ease-out motion-reduce:transition-none',
+      isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0',
+      className,
+    ),
+    style: { transitionDelay: isVisible ? `${delayMs}ms` : '0ms' },
+  }, children)
 }
