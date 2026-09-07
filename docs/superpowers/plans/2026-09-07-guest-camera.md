@@ -346,7 +346,7 @@ import assert from 'node:assert/strict'
 import { sanitizeText } from './text.ts'
 
 test('trims, collapses whitespace, strips control characters', () => {
-  assert.equal(sanitizeText('  Say  hi the\twind \n', 120), 'Say hi the wind')
+  assert.equal(sanitizeText('  Say  hi the\twind \n', 120), 'Say hi the wind')
 })
 
 test('truncates to max', () => {
@@ -855,7 +855,7 @@ if (run('A')) {
   const fileOk = await fetch(`${SB}/storage/v1/object/public/gallery/${row.storage_path}`).then((r) => r.status)
   ok('A9 the file is publicly readable at its URL', fileOk === 200, `HTTP ${fileOk}`)
 
-  const c1 = await patch({ id: good.body.id, caption: '  Say   hi the wind ', guest_name: 'Sofie' })
+  const c1 = await patch({ id: good.body.id, caption: '  Say   hi the wind ', guest_name: 'Sofie' })
   rows = await guestRows()
   const after = rows.find((r) => r.id === good.body.id)
   ok('A10 PATCH saves a sanitised caption and name', c1.status === 200 && after?.caption === 'Say hi the wind' && after?.guest_name === 'Sofie', `${after?.caption} / ${after?.guest_name}`)
