@@ -58,7 +58,7 @@ export function Onskeliste() {
           <SectionHeading
             eyebrow="Ønskeliste"
             title="Victors ønskeliste"
-            description="I skal selvfølgelig ikke have gave med, men er I i tvivl, er her et par idéer. Reservér den, I vælger, så de andre kan se, den er taget."
+            description="Mangler I idéer, er her et par stykker. Reservér den, I vælger, så de andre kan se, den er taget. Kig gerne forbi igen en gang imellem, for Victor finder måske på noget nyt ;)"
           />
           <div className="mb-1 flex flex-shrink-0 gap-1 rounded-full border border-ink-900/10 bg-cream-50 p-1">
             <button
