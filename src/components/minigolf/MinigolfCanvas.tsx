@@ -223,7 +223,22 @@ export default function MinigolfCanvas({
   }
 
   return (
-    <div className="relative h-[70vh] w-full overflow-hidden rounded-2xl border border-ink-900/10">
+    <div
+      // The arbitrary variant repeats the rule on the <canvas> r3f creates.
+      // An ancestor's touch-action does govern touches that start inside it,
+      // but stating it on the element the finger actually lands on leaves
+      // nothing to interpretation.
+      className="relative h-[70vh] w-full overflow-hidden rounded-2xl border border-ink-900/10 [&_canvas]:touch-none"
+      // touch-action: none over the play surface.
+      //
+      // Most guests open this on a phone, and by default the browser claims a
+      // vertical drag as a page scroll: it fires pointerdown, then pointercancel
+      // as soon as it decides the gesture is a scroll, and the shot is never
+      // played — the aiming gesture and the scroll gesture are the same swipe.
+      // Turning it off HERE and not on the body is deliberate: the page above
+      // and below the game still scrolls normally.
+      style={{ touchAction: 'none' }}
+    >
       <div className="absolute top-3 left-3 z-10 rounded-full bg-cream-50/90 px-4 py-2 text-sm font-medium text-ink-900">
         Slag: {shots}
       </div>

@@ -1,5 +1,6 @@
-import { Menu, X } from 'lucide-react'
+import { FlagTriangleRight, Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Container } from '@/components/Container'
 import { NAV_SECTIONS } from '@/data/siteConfig'
@@ -9,6 +10,7 @@ import { cn, scrollToSection } from '@/lib/utils'
 export function Navigation() {
   const scrolled = useScrolled(32)
   const [menuOpen, setMenuOpen] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (!menuOpen) return
@@ -23,9 +25,11 @@ export function Navigation() {
     }
   }, [menuOpen])
 
-  function handleNavigate(id: string) {
+  function handleNavigate(section: { id: string; to?: string }) {
     setMenuOpen(false)
-    scrollToSection(id)
+    // Minigolf is a route, not a section — see NAV_SECTIONS.
+    if (section.to) navigate(section.to)
+    else scrollToSection(section.id)
   }
 
   return (
@@ -46,9 +50,12 @@ export function Navigation() {
           {NAV_SECTIONS.map((section) => (
             <li key={section.id}>
               <button
-                onClick={() => handleNavigate(section.id)}
-                className="rounded-full px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/15"
+                onClick={() => handleNavigate(section)}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/15"
               >
+                {/* The one entry that leaves the page carries a flagstick, the
+                    same shape as the one standing in the cup in the game. */}
+                {section.to && <FlagTriangleRight size={15} strokeWidth={2.25} aria-hidden />}
                 {section.label}
               </button>
             </li>
@@ -59,7 +66,7 @@ export function Navigation() {
           <Button
             variant="primary"
             className="!px-5 !py-2.5 text-sm"
-            onClick={() => handleNavigate('tilmelding')}
+            onClick={() => handleNavigate({ id: 'tilmelding' })}
           >
             Tilmeld jer
           </Button>
@@ -85,9 +92,10 @@ export function Navigation() {
             {NAV_SECTIONS.map((section) => (
               <li key={section.id}>
                 <button
-                  onClick={() => handleNavigate(section.id)}
-                  className="w-full py-3 text-left text-base font-medium text-ink-900"
+                  onClick={() => handleNavigate(section)}
+                  className="flex w-full items-center gap-2 py-3 text-left text-base font-medium text-ink-900"
                 >
+                  {section.to && <FlagTriangleRight size={17} strokeWidth={2.25} aria-hidden />}
                   {section.label}
                 </button>
               </li>
