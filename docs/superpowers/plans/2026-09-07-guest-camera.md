@@ -796,7 +796,7 @@ Create `.superpowers/sdd/2026-09-03-minigolf/verify_guest_camera.mjs`. The top i
  * the end, files included. It flips the camera switch and restores it.
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 const [, , BASE = 'http://localhost:5173', OUT = './cam-out', ONLY = 'all'] = process.argv
 mkdirSync(OUT, { recursive: true })
@@ -1638,7 +1638,7 @@ async function browser(url, { width = 1440, height = 900, mobile = false } = {})
 
 // A 640x480 JPEG on disk for the file input. Written once from the tiny JPEG,
 // scaled up by the page's own resize step, so it exercises the real path.
-const TEST_JPEG = join(OUT, 'test-shot.jpg')
+const TEST_JPEG = resolve(OUT, 'test-shot.jpg') // absolute: DOM.setFileInputFiles resolves relative paths to an empty File
 writeFileSync(TEST_JPEG, JPEG)
 ```
 
