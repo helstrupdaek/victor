@@ -309,3 +309,13 @@ says so; the route returns 403; the wall renders existing photos as polaroids.
 | Wall refresh while on | every 15 s, only when in view |
 | Tilt / offset | ±4° / ±6 px, fixed per photo |
 | QR download | 1024 px PNG |
+
+## Amendments after the whole-branch review (2026-09-07)
+
+Three statements above were corrected by the final review and the code now follows these:
+
+1. **Upload body contract.** The phone posts the JPEG with `Content-Type: application/octet-stream` and an `X-Image-Type` header (`image/jpeg`, `image/png` or `image/webp`), because Vercel's Node helper exposes a pre-read body as a `Buffer` only for `application/octet-stream`; for `image/*` it leaves `req.body` undefined with the stream already drained. A direct `Content-Type: image/*` POST is still accepted (tools, tests). After reading the body the route checks the file's magic bytes against the declared type and answers `415` on a mismatch. The harness compares the stored object byte-for-byte with what was uploaded.
+2. **Caption PATCH.** The photo id is not a secret: anyone may read published rows with the anon key. The PATCH therefore succeeds only while `caption` and `guest_name` are both still null and the photo is under 30 minutes old; afterwards it answers `404`. The guest flow writes exactly once, seconds after upload. Hosts edit through /admin (authenticated), unaffected.
+3. **`uploader_hash` visibility.** The public read names its columns and omits `uploader_hash`; migration `0008_photos_anon_columns.sql` restricts `anon`'s `select` grant on `photos` to that column list so a direct PostgREST query cannot read it either. Until 0008 is applied the column is readable by anyone holding the anon key (it is an HMAC, not reversible, but it groups photos by uploader).
+
+Also from the review: the wall polls only while the tab is visible and the lightbox is closed; dimension headers are capped at 20 000; the rate-limit key prefers `x-vercel-forwarded-for`.

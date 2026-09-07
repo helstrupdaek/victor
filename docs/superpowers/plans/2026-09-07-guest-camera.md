@@ -2374,3 +2374,15 @@ Tell the owner: the deployed commit SHA, that the camera is **off** in productio
 **Placeholders.** None: every code step has the code, every run step has the command and the expected result.
 
 **Type consistency.** `fetchPublishedPhotos(direction)` (Task 2) is called with `order` in Task 10. `setPhotoPinned`, `updatePhotoText`, `deleteAllGuestPhotos` (Task 2) are used with the same signatures in Task 11. `resizeForUpload` returns `{ blob, width, height }` and `uploadGuestPhoto` takes exactly that (Task 6, used in Task 9). `Polaroid` props (Task 7) match every call in Tasks 9, 10, 11 (`id, url, caption, guestName, width, height, tilted`). `QrCode` / `downloadQrPng` (Task 8) match Tasks 10 and 11. `GalleryDirection` is exported from `src/types/index.ts` (Task 2) and imported from there everywhere.
+
+---
+
+## Post-review amendments (2026-09-07, after Task 12)
+
+The whole-branch review produced one fix round; the code is authoritative for these, and the task code blocks above are not rewritten:
+
+- Task 5/6 (`api/photos/guest.ts`, `api/_lib/upload.ts`, `src/lib/guestCamera.ts`): upload body is `application/octet-stream` + `X-Image-Type`; direct `image/*` still accepted; `looksLikeImage()` magic-byte check → 415; dimension headers ≤ 20 000; `clientIp` prefers `x-vercel-forwarded-for`. Suite A gains A19–A21 (octet-stream 201, text body 415, stored bytes equal uploaded bytes).
+- Task 5 (`caption`): update filtered to `caption is null and guest_name is null and created_at > now() - 30 min`; second PATCH → 404.
+- Task 2 (`src/lib/api/photos.ts`): `fetchPublishedPhotos` names its columns, omitting `uploader_hash`. New migration `0008_photos_anon_columns.sql` (owner applies) restricts anon's select grant to that list.
+- Task 10 (`Billeder.tsx`): polling also requires `document.visibilityState === 'visible'` and a closed lightbox; initial `load()` has `.catch`.
+- Task 7 (`Polaroid.tsx`): caption `line-clamp-2` instead of `truncate`. Task 9 (`KameraPage.tsx`): unused `inputRef` removed.
