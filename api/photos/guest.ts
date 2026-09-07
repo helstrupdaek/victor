@@ -28,9 +28,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 type Req = IncomingMessage & { body?: unknown }
 
 export default async function handler(req: Req, res: ServerResponse): Promise<void> {
-  if (req.method === 'POST') return upload(req, res)
-  if (req.method === 'PATCH') return caption(req, res)
-  sendJson(res, 405, { ok: false, error: 'Method not allowed' })
+  // One catch for both methods, so the JSON error contract holds even for the
+  // failures the bodies do not anticipate — a malformed PATCH body throwing
+  // inside JSON.parse, a missing env var throwing inside getSupabaseAdmin.
+  // Without it, Vercel answers those with its own plain 500, not
+  // { ok: false, error }. `await` matters: a returned promise would escape.
+  try {
+    if (req.method === 'POST') return await upload(req, res)
+    if (req.method === 'PATCH') return await caption(req, res)
+    sendJson(res, 405, { ok: false, error: 'Metoden er ikke tilladt.' })
+  } catch (e) {
+    console.error('[photos/guest] unhandled:', e)
+    if (!res.headersSent) sendJson(res, 500, { ok: false, error: 'Noget gik galt. Prøv igen om lidt.' })
+  }
 }
 
 async function cameraEnabled(supabase: ReturnType<typeof getSupabaseAdmin>): Promise<boolean> {
