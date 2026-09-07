@@ -2080,10 +2080,11 @@ export function GalleryTab() {
     setIsUploading(true)
     try {
       for (const file of Array.from(files)) await uploadPhoto(file)
-      load()
     } catch (e: unknown) {
       setError(messageOf(e))
     } finally {
+      // Refresh either way: files uploaded before a failure are on the server and must show.
+      load()
       setIsUploading(false)
       event.target.value = ''
     }
