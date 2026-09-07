@@ -41,6 +41,16 @@ test('client ip is the first x-forwarded-for entry, else the socket', () => {
   assert.equal(clientIp({ headers: {}, socket: { remoteAddress: '::1' } } as never), '::1')
 })
 
+test('client ip prefers x-vercel-forwarded-for over x-forwarded-for', () => {
+  assert.equal(
+    clientIp({
+      headers: { 'x-vercel-forwarded-for': '9.9.9.9', 'x-forwarded-for': '1.2.3.4' },
+      socket: {},
+    } as never),
+    '9.9.9.9',
+  )
+})
+
 test('uploader hash is stable, secret-dependent, 32 hex chars', () => {
   const a = uploaderHash('1.2.3.4', 'secret')
   assert.match(a, /^[0-9a-f]{32}$/)

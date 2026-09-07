@@ -43,7 +43,7 @@ export function Polaroid({
           className="h-full w-full object-cover"
         />
       </div>
-      <figcaption className="font-hand mt-3 min-h-7 truncate text-center text-xl leading-7 text-ink-900">
+      <figcaption className="font-hand mt-3 line-clamp-2 min-h-7 text-center text-xl leading-7 text-ink-900">
         {caption}
         {guestName && (
           <span className={cn('text-ink-500', caption && 'ml-2')}>

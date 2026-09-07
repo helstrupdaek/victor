@@ -45,8 +45,17 @@ export async function readRawBody(
   return Buffer.concat(chunks)
 }
 
-/** Vercel puts the real client first in x-forwarded-for. */
+/**
+ * Vercel puts the real client first in x-forwarded-for, but on Vercel itself
+ * x-vercel-forwarded-for is the more trustworthy header (set by their edge,
+ * harder for a client to spoof than a plain forwarded-for) — prefer it when
+ * present, and fall back to the older header everywhere else (local dev,
+ * other hosts).
+ */
 export function clientIp(req: IncomingMessage): string {
+  const vercelFwd = req.headers['x-vercel-forwarded-for']
+  const vercelFirst = (Array.isArray(vercelFwd) ? vercelFwd[0] : vercelFwd)?.split(',')[0]?.trim()
+  if (vercelFirst) return vercelFirst
   const fwd = req.headers['x-forwarded-for']
   const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim()
   return first || req.socket?.remoteAddress || 'unknown'

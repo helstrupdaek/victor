@@ -1,6 +1,6 @@
 import { Camera } from 'lucide-react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/FormControls'
 import { Polaroid } from '@/components/Polaroid'
@@ -28,7 +28,6 @@ export function KameraPage() {
   const [caption, setCaption] = useState('')
   const [name, setName] = useState('')
   const [isSaving, setIsSaving] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchGuestCameraEnabled()
@@ -86,7 +85,6 @@ export function KameraPage() {
       </span>
       <span className="text-lg font-medium text-ink-900">Tag et billede</span>
       <input
-        ref={inputRef}
         type="file"
         accept="image/*"
         capture="environment"

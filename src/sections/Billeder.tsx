@@ -30,17 +30,35 @@ export function Billeder() {
 
   useEffect(() => {
     let cancelled = false
-    load().finally(() => { if (!cancelled) setIsLoading(false) })
+    load().catch(() => {}).finally(() => { if (!cancelled) setIsLoading(false) })
     return () => { cancelled = true }
   }, [load])
 
-  // Live only while it matters: camera on AND the wall on screen. A page left
-  // open in a background tab or scrolled past does not poll.
+  // Live only while it matters: camera on, the wall on screen, no photo open
+  // in the lightbox, and the tab actually visible. A page left in a
+  // background tab, scrolled past, or with a photo open does not poll; a
+  // visibilitychange listener starts and stops the interval as the tab is
+  // switched away from and back to, rather than only checking once.
   useEffect(() => {
-    if (!cameraOn || !isVisible) return undefined
-    const t = setInterval(() => { load().catch(() => {}) }, REFRESH_MS)
-    return () => clearInterval(t)
-  }, [cameraOn, isVisible, load])
+    if (!cameraOn || !isVisible || openIndex !== null) return undefined
+    let timer: ReturnType<typeof setInterval> | undefined
+    const start = () => {
+      if (timer === undefined) timer = setInterval(() => { load().catch(() => {}) }, REFRESH_MS)
+    }
+    const stop = () => {
+      if (timer !== undefined) { clearInterval(timer); timer = undefined }
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+    if (document.visibilityState === 'visible') start()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [cameraOn, isVisible, openIndex, load])
 
   const kameraUrl = typeof window === 'undefined' ? '/kamera' : `${window.location.origin}/kamera`
 

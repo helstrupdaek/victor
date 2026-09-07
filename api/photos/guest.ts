@@ -97,7 +97,14 @@ async function upload(req: Req, res: ServerResponse): Promise<void> {
 
   const width = Number(req.headers['x-image-width'])
   const height = Number(req.headers['x-image-height'])
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    width > 20000 ||
+    height > 20000
+  ) {
     sendJson(res, 400, { ok: false, error: 'Billedets størrelse mangler.' })
     return
   }
