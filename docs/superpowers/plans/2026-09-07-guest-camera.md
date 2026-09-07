@@ -39,7 +39,7 @@ Copied from the spec's "Numbers, all in one place" and section 3. Every task's r
 - `src/components/Button.tsx`: `<Button variant="primary"|"outline"|"ghost">`; `src/components/FormControls.tsx`: `Input`, `Label`, `Textarea`
 - `Photo` type is in `src/types/index.ts` at the `export interface Photo {` block
 - RLS: anon may `select` photos where `is_published = true` (policy `photos_public_select_published`); `authenticated` has all on `photos`; the `gallery` bucket is public-read, authenticated-write. Guest writes go through the route only.
-- Pure-logic tests: `node --test <file>.test.ts` works on this machine (Node 23.7 strips types). Test files must import with **relative paths** and must not import anything that uses the `@/` alias, `import.meta.env`, or the DOM.
+- Pure-logic tests: `node --disable-warning=ExperimentalWarning --test <file>.test.ts` on this machine (Node 23.7 strips types; without the flag it prints an ExperimentalWarning on every run, which fails the pristine-output rule). Test files must import with **relative paths** and must not import anything that uses the `@/` alias, `import.meta.env`, or the DOM.
 - Browser suites live in `.superpowers/sdd/2026-09-03-minigolf/` (gitignored). Read `verify_punt_and_drag.mjs` lines 15–66 for the CDP boilerplate every suite here copies.
 
 ---
@@ -364,11 +364,15 @@ test('empty, whitespace-only and non-strings become null', () => {
 test('keeps Danish letters and emoji', () => {
   assert.equal(sanitizeText('Skål for Victor 🎉', 120), 'Skål for Victor 🎉')
 })
+
+test('strips real control characters, not just whitespace ones', () => {
+  assert.equal(sanitizeText('A\u0000B\u001bC\u007fD', 120), 'ABCD')
+})
 ```
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `node --test api/_lib/text.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test api/_lib/text.test.ts`
 Expected: fails with `Cannot find module './text.ts'`.
 
 - [ ] **Step 3: Implement**
@@ -377,15 +381,18 @@ Expected: fails with `Cannot find module './text.ts'`.
 // api/_lib/text.ts
 /**
  * One sanitiser for every free-text field a guest can write. Control
- * characters are stripped so a name cannot smuggle terminal escapes or
- * zero-width tricks onto the wall; whitespace is collapsed so "A   B" and
+ * characters are stripped so a name cannot smuggle terminal escapes onto the
+ * wall; whitespace is collapsed so "A   B" and
  * "A B" read the same; the result is capped and empty becomes null so the
  * database stores "nothing" as NULL rather than "".
  */
 export function sanitizeText(input: unknown, max: number): string | null {
   if (typeof input !== 'string') return null
   const cleaned = input
-    .replace(/[\u0000-\u001f\u007f]/g, '')
+    // 0x09-0x0D (tab, LF, VT, FF, CR) are deliberately NOT in this class: they
+    // are whitespace, and the next step collapses them to a single space. The
+    // first version stripped them here and 'the<TAB>wind' became 'thewind'.
+    .replace(/[\u0000-\u0008\u000e-\u001f\u007f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, max)
@@ -395,8 +402,8 @@ export function sanitizeText(input: unknown, max: number): string | null {
 
 - [ ] **Step 4: Run it to see it pass**
 
-Run: `node --test api/_lib/text.test.ts`
-Expected: `ℹ pass 4`, `ℹ fail 0`.
+Run: `node --disable-warning=ExperimentalWarning --test api/_lib/text.test.ts`
+Expected: `ℹ pass 5`, `ℹ fail 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -469,7 +476,7 @@ test('uploader hash is stable, secret-dependent, 32 hex chars', () => {
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `node --test api/_lib/upload.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test api/_lib/upload.test.ts`
 Expected: fails with `Cannot find module './upload.ts'`.
 
 - [ ] **Step 3: Implement**
@@ -543,7 +550,7 @@ export function uploaderHash(ip: string, secret: string): string {
 
 - [ ] **Step 4: Run it to see it pass**
 
-Run: `node --test api/_lib/upload.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test api/_lib/upload.test.ts`
 Expected: `ℹ pass 6`, `ℹ fail 0`.
 
 - [ ] **Step 5: Commit**
@@ -976,7 +983,7 @@ test('dimensions are whole pixels', () => {
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `node --test src/lib/imageFit.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test src/lib/imageFit.test.ts`
 Expected: `Cannot find module './imageFit.ts'`.
 
 - [ ] **Step 3: Implement the pure part**
@@ -998,7 +1005,7 @@ export function fitWithin(width: number, height: number, maxSide: number) {
 
 - [ ] **Step 4: Run it to see it pass**
 
-Run: `node --test src/lib/imageFit.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test src/lib/imageFit.test.ts`
 Expected: `ℹ pass 4`, `ℹ fail 0`.
 
 - [ ] **Step 5: Write the browser side**
@@ -1139,7 +1146,7 @@ test('tilts actually use both signs', () => {
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `node --test src/lib/polaroidTilt.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test src/lib/polaroidTilt.test.ts`
 Expected: `Cannot find module './polaroidTilt.ts'`.
 
 - [ ] **Step 3: Implement**
@@ -1173,7 +1180,7 @@ export function tiltFor(id: string) {
 
 - [ ] **Step 4: Run it to see it pass**
 
-Run: `node --test src/lib/polaroidTilt.test.ts`
+Run: `node --disable-warning=ExperimentalWarning --test src/lib/polaroidTilt.test.ts`
 Expected: `ℹ pass 4`, `ℹ fail 0`.
 
 - [ ] **Step 5: Add the handwriting font**
@@ -2261,10 +2268,10 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - [ ] **Step 1: Run every pure test and the whole harness**
 
 ```bash
-node --test api/_lib/text.test.ts api/_lib/upload.test.ts src/lib/imageFit.test.ts src/lib/polaroidTilt.test.ts
+node --disable-warning=ExperimentalWarning --test api/_lib/text.test.ts api/_lib/upload.test.ts src/lib/imageFit.test.ts src/lib/polaroidTilt.test.ts
 node .superpowers/sdd/2026-09-03-minigolf/verify_guest_camera.mjs http://localhost:5173 .superpowers/sdd/2026-09-03-minigolf/cam-out all
 ```
-Expected: `ℹ pass 18` / `ℹ fail 0` for the pure tests (4 + 6 + 4 + 4); the harness ends `55/55 passed` (A 18, B 11, C 11, D 12, cleanup 3). The camera switch must be back to off at the end (Z3 says `off`).
+Expected: `ℹ pass 19` / `ℹ fail 0` for the pure tests (5 + 6 + 4 + 4); the harness ends `55/55 passed` (A 18, B 11, C 11, D 12, cleanup 3). The camera switch must be back to off at the end (Z3 says `off`).
 
 - [ ] **Step 2: Production build and bundle checks**
 
