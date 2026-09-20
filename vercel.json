@@ -1,5 +1,8 @@
 {
   "rewrites": [
     { "source": "/((?!.*\\.[a-zA-Z0-9]+$).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/keepalive", "schedule": "17 5 * * *" }
   ]
 }
