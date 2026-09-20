@@ -4,6 +4,7 @@ import { Billeder } from '@/sections/Billeder'
 import { Dagen } from '@/sections/Dagen'
 import { Hero } from '@/sections/Hero'
 import { Invitation } from '@/sections/Invitation'
+import { MinigolfTeaser } from '@/sections/MinigolfTeaser'
 import { Onskeliste } from '@/sections/Onskeliste'
 import { PraktiskInfo } from '@/sections/PraktiskInfo'
 import { Tilmelding } from '@/sections/Tilmelding'
@@ -21,6 +22,7 @@ export function HomePage() {
         <Onskeliste />
         <PraktiskInfo />
         <Vejret />
+        <MinigolfTeaser />
         <Billeder />
       </main>
       <Footer />
