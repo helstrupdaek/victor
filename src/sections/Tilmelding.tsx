@@ -64,7 +64,7 @@ async function handleSubmit(_previous: RsvpFormState, formData: FormData): Promi
   }
 }
 
-export function Tilmelding() {
+export function Tilmelding({ prefill }: { prefill?: { name: string; email: string | null } } = {}) {
   const [isEditing, setIsEditing] = useState(false)
   const [state, formAction, isPending] = useActionState(handleSubmit, initialState)
   const { value: event } = useSiteSetting<EventInfo>('event_info', DEFAULT_EVENT_INFO)
@@ -142,7 +142,8 @@ export function Tilmelding() {
 
         {showForm && (
           <Reveal className="mt-12">
-            <form action={formAction} className="space-y-6">
+            {/* key: the invitation loads after mount, and defaultValue only applies on mount */}
+            <form key={prefill?.name ?? ''} action={formAction} className="space-y-6">
               <fieldset className="grid grid-cols-2 gap-3">
                 <legend className="mb-1.5 block text-sm font-medium text-ink-800">
                   Kommer I?
@@ -169,7 +170,7 @@ export function Tilmelding() {
                     name="name"
                     required
                     autoComplete="name"
-                    defaultValue={state.submission?.name}
+                    defaultValue={state.submission?.name ?? prefill?.name}
                   />
                 </div>
                 <div>
@@ -180,7 +181,7 @@ export function Tilmelding() {
                     type="email"
                     required
                     autoComplete="email"
-                    defaultValue={state.submission?.email}
+                    defaultValue={state.submission?.email ?? prefill?.email ?? undefined}
                   />
                 </div>
                 <div>

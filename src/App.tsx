@@ -10,6 +10,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/i/:token" element={<HomePage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/wish" element={<WishPage />} />
         <Route path="/minigolf" element={<MinigolfPage />} />

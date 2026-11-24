@@ -165,3 +165,26 @@ ${event.hosts}`
 
   return { subject, html, text }
 }
+
+export function buildInvitationEmail(message: string, link: string): {
+  subject: string
+  html: string
+  text: string
+} {
+  const button = `<p style="margin:24px 0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:#2c3b26;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:bold;">Åbn din invitation</a></p>`
+  const paragraphs = escapeHtml(message)
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 16px;">${p.replace(/\n/g, '<br/>')}</p>`)
+    .join('')
+  // The link stays clickable where the template put it, and the button below
+  // gives the big obvious target.
+  const linked = paragraphs.replaceAll(
+    escapeHtml(link),
+    `<a href="${escapeHtml(link)}" style="color:#4b6244;">${escapeHtml(link)}</a>`,
+  )
+  return {
+    subject: 'Du er inviteret til Victors konfirmation',
+    html: wrapHtml(linked + button),
+    text: message,
+  }
+}

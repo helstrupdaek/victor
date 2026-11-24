@@ -1,17 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Guest } from '@/types'
 import { getEventInfo } from './_lib/eventInfo.js'
-import { readJsonBody, sendJson } from './_lib/http.js'
+import { getBaseUrl, readJsonBody, sendJson } from './_lib/http.js'
 import { buildConfirmationIcs, ICS_FILENAME } from './_lib/ics.js'
 import { buildConfirmationEmail } from './_lib/emailTemplate.js'
 import { sendEmail } from './_lib/resend.js'
 import { getSupabaseAdmin } from './_lib/supabaseAdmin.js'
-
-function getBaseUrl(req: IncomingMessage): string {
-  const host = req.headers.host ?? 'localhost:5173'
-  const protocol = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https'
-  return `${protocol}://${host}`
-}
 
 /**
  * POST { email } — looks up that email's RSVP + reserved gifts (server-side,

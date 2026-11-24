@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { signOutAdmin } from '@/lib/api/auth'
 import { EventInfoTab } from './tabs/EventInfoTab'
 import { GalleryTab } from './tabs/GalleryTab'
+import { InvitationsTab } from './tabs/InvitationsTab'
 import { MinigolfTab } from './tabs/MinigolfTab'
 import { PracticalInfoTab } from './tabs/PracticalInfoTab'
 import { RsvpTab } from './tabs/RsvpTab'
@@ -11,6 +12,7 @@ import { WishlistTab } from './tabs/WishlistTab'
 
 const TABS = [
   { id: 'rsvp', label: 'Tilmeldinger', component: RsvpTab },
+  { id: 'invitations', label: 'Invitationer', component: InvitationsTab },
   // Second, not last: this is the tab the two of you will open most often
   // between now and May.
   { id: 'todo', label: 'To-do', component: TodoTab },

@@ -36,3 +36,9 @@ export function getQueryParam(
   const url = new URL(req.url ?? '', 'http://localhost')
   return url.searchParams.get(name)
 }
+
+export function getBaseUrl(req: IncomingMessage): string {
+  const host = req.headers.host ?? 'localhost:5173'
+  const protocol = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https'
+  return `${protocol}://${host}`
+}

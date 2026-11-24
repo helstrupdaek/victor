@@ -163,3 +163,18 @@ export interface MinigolfScore {
   seconds: number
   score: number
 }
+
+/** One guest on the Invitationer list in /admin (migration 0009). */
+export interface Invitation {
+  id: string
+  created_at: string
+  name: string
+  email: string | null
+  phone: string | null
+  /** The guest's link is /i/<token>. */
+  token: string
+  email_sent_at: string | null
+  sms_sent_at: string | null
+  /** First time the guest opened their link. */
+  opened_at: string | null
+}
