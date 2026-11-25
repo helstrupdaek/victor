@@ -182,7 +182,7 @@ export function buildInvitationEmail(
   const churchLine = `${event.churchName}, ${event.churchCity}${event.churchStartTime ? ` kl. ${event.churchStartTime}` : ''}`
   const partyLine = `${event.partyAddressLine1}, ${event.partyPostalCode} ${event.partyCity}`
 
-  const header = `<img src="${origin}/images/email/victor.png" width="180" alt="Victor" style="display:block;margin:20px auto -28px;width:180px;max-width:60%;height:auto;border:0;" />`
+  const header = `<img src="${origin}/images/email/victor.png" width="150" alt="Victor" style="display:block;margin:20px auto -28px;width:150px;max-width:50%;height:auto;border:0;" />`
   const button = `<p style="margin:28px 0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:${COLORS.greenDark};color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:999px;font-weight:bold;font-size:15px;">Åbn din invitation</a></p>`
   const paragraphs = escapeHtml(message)
     .split(/\n{2,}/)

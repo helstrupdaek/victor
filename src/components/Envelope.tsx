@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion'
 import { GolfCard } from './GolfCard'
+import { CanvasErrorBoundary } from './minigolf/CanvasErrorBoundary'
+
+const loadPopupCard = () => import('./popup/PopupCard3D')
+const PopupCard3D = lazy(loadPopupCard)
 
 /**
  * The personal-invitation intro on /i/<token>: an envelope arrives, the flap
  * opens, the letter slides up with the guest's name, then the envelope drops
- * away and a pop-up golf card unfolds (GolfCard). A tap sends the card flying
- * off the top to reveal the site; tapping earlier skips ahead a step. Pure CSS transitions; the
+ * away and a 3D pop-up card opens on the "table" (PopupCard3D; the flat SVG
+ * GolfCard stands in where WebGL fails). A tap sends the card flying off the
+ * top to reveal the site; tapping earlier skips ahead a step. Pure CSS transitions; the
  * global reduced-motion rule in index.css shortens them to nothing.
  */
 
@@ -25,6 +31,14 @@ export function Envelope({
   onDone: () => void
 }) {
   const [phase, setPhase] = useState<Phase>('arrive')
+  const [cardOpen, setCardOpen] = useState(false)
+  const reduced = usePrefersReducedMotion()
+
+  // Fetch the 3D card and Victor's flipbook while the envelope plays.
+  useEffect(() => {
+    void loadPopupCard()
+    new Image().src = '/images/victor-putt-sprite.webp'
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => setPhase((p) => (p === 'arrive' ? 'open' : p)), 900)
@@ -121,15 +135,46 @@ export function Envelope({
         </div>
       </div>
 
-      {card && <GolfCard name={name} dateLabel={dateLabel} visible={card} flying={flying} />}
+      {card && (
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: flying ? 'translateY(-130vh) rotate(-6deg)' : 'none',
+            transition: `transform ${FLY_MS}ms cubic-bezier(0.55, 0, 0.75, 0)`,
+          }}
+        >
+          <CanvasErrorBoundary fallback={<GolfCard name={name} dateLabel={dateLabel} visible flying={false} />}>
+            <Suspense fallback={null}>
+              <PopupCard3D still={reduced} onOpened={() => setCardOpen(true)} />
+            </Suspense>
+          </CanvasErrorBoundary>
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-[9vh] px-6 text-center"
+            style={{
+              opacity: cardOpen ? 1 : 0,
+              transform: cardOpen ? 'none' : 'translateY(10px)',
+              transition: 'opacity 700ms ease, transform 700ms ease',
+            }}
+          >
+            <p className="font-hand text-3xl text-gold-400 sm:text-4xl">Kære {name ?? 'gæst'}</p>
+            <p className="mt-1 font-display text-2xl leading-snug text-cream-50 sm:text-3xl">
+              Du er inviteret til Victors konfirmation
+            </p>
+            <p className="mt-1 text-sm tracking-wide text-cream-100/80">{dateLabel}</p>
+            <p className="mt-6 animate-pulse text-xs tracking-widest text-cream-100/70 uppercase">
+              Tryk for at se invitationen
+            </p>
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
         className="mt-10 text-sm tracking-widest text-cream-100/80 uppercase"
-        style={{ opacity: flying ? 0 : 1, transition: 'opacity 200ms' }}
+        style={{ opacity: flying || card ? 0 : 1, transition: 'opacity 200ms' }}
       >
         <span className={open ? 'animate-pulse' : ''}>
-          {card ? 'Tryk for at se invitationen' : open ? 'Tryk for at åbne' : 'Du har fået post'}
+          {open ? 'Tryk for at åbne' : 'Du har fået post'}
         </span>
       </button>
     </div>
