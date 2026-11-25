@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
+import { GolfCard } from './GolfCard'
 
 /**
  * The personal-invitation intro on /i/<token>: an envelope arrives, the flap
- * opens, the letter slides up with the guest's name, and a tap sends the whole
- * thing flying off the top to reveal the site. Pure CSS transitions; the
+ * opens, the letter slides up with the guest's name, then the envelope drops
+ * away and a pop-up golf card unfolds (GolfCard). A tap sends the card flying
+ * off the top to reveal the site; tapping earlier skips ahead a step. Pure CSS transitions; the
  * global reduced-motion rule in index.css shortens them to nothing.
  */
 
-type Phase = 'arrive' | 'open' | 'fly'
+type Phase = 'arrive' | 'open' | 'card' | 'fly'
 
 // The envelope leaves first (FLY_MS), then the green backdrop fades (FADE_MS).
 const FLY_MS = 850
@@ -26,10 +28,12 @@ export function Envelope({
 
   useEffect(() => {
     const timer = setTimeout(() => setPhase((p) => (p === 'arrive' ? 'open' : p)), 900)
+    const cardTimer = setTimeout(() => setPhase((p) => (p === 'open' ? 'card' : p)), 2700)
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       clearTimeout(timer)
+      clearTimeout(cardTimer)
       document.body.style.overflow = overflow
     }
   }, [])
@@ -40,9 +44,10 @@ export function Envelope({
     return () => clearTimeout(timer)
   }, [phase, onDone])
 
-  const advance = () => setPhase((p) => (p === 'arrive' ? 'open' : 'fly'))
+  const advance = () => setPhase((p) => (p === 'arrive' ? 'open' : p === 'open' ? 'card' : 'fly'))
   const open = phase !== 'arrive'
   const flying = phase === 'fly'
+  const card = phase === 'card' || flying
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPhase('fly')
@@ -66,8 +71,9 @@ export function Envelope({
         className="relative mt-[30vh] aspect-[7/5] w-[min(86vw,380px)] animate-[fadeIn_700ms_ease-out]"
         style={{
           perspective: '1200px',
-          transform: flying ? 'translateY(-130vh) rotate(-12deg) scale(0.9)' : 'none',
-          transition: `transform ${FLY_MS}ms cubic-bezier(0.55, 0, 0.75, 0)`,
+          // Once the card is out, the empty envelope drops away below.
+          transform: card ? 'translateY(110vh) rotate(8deg)' : 'none',
+          transition: 'transform 900ms cubic-bezier(0.55, 0, 0.75, 0)',
         }}
       >
         {/* Inside of the envelope */}
@@ -115,12 +121,16 @@ export function Envelope({
         </div>
       </div>
 
+      {card && <GolfCard name={name} dateLabel={dateLabel} visible={card} flying={flying} />}
+
       <button
         type="button"
         className="mt-10 text-sm tracking-widest text-cream-100/80 uppercase"
         style={{ opacity: flying ? 0 : 1, transition: 'opacity 200ms' }}
       >
-        <span className={open ? 'animate-pulse' : ''}>{open ? 'Tryk for at åbne' : 'Du har fået post'}</span>
+        <span className={open ? 'animate-pulse' : ''}>
+          {card ? 'Tryk for at se invitationen' : open ? 'Tryk for at åbne' : 'Du har fået post'}
+        </span>
       </button>
     </div>
   )

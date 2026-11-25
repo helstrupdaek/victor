@@ -24,7 +24,7 @@ const COLORS = {
   border: '#e6ddc6',
 }
 
-function wrapHtml(bodyHtml: string): string {
+function wrapHtml(bodyHtml: string, headerExtra = ''): string {
   return `<!doctype html>
 <html lang="da">
   <body style="margin:0;padding:0;background-color:${COLORS.cream};font-family:Georgia,'Times New Roman',serif;color:${COLORS.ink};">
@@ -35,7 +35,7 @@ function wrapHtml(bodyHtml: string): string {
             <tr>
               <td style="background-color:${COLORS.greenDark};padding:28px 32px;text-align:center;">
                 <p style="margin:0;color:#f8f5ee;letter-spacing:4px;font-size:12px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">Konfirmation</p>
-                <p style="margin:6px 0 0;color:#ffffff;font-size:32px;letter-spacing:2px;">VICTOR</p>
+                <p style="margin:6px 0 0;color:#ffffff;font-size:32px;letter-spacing:2px;">VICTOR</p>${headerExtra}
               </td>
             </tr>
             <tr>
@@ -166,12 +166,24 @@ ${event.hosts}`
   return { subject, html, text }
 }
 
-export function buildInvitationEmail(message: string, link: string): {
-  subject: string
-  html: string
-  text: string
-} {
-  const button = `<p style="margin:24px 0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:#2c3b26;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:999px;font-weight:bold;">Åbn din invitation</a></p>`
+/**
+ * The invitation mail: Victor's photo in the green header, the hosts' message,
+ * a big button, then the church photo and the key facts. Images are absolute
+ * URLs on the site itself (PNG/JPG, since Outlook won't show WebP); the mail
+ * still reads fine when a client blocks images.
+ */
+export function buildInvitationEmail(
+  message: string,
+  link: string,
+  event: EventInfo,
+): { subject: string; html: string; text: string } {
+  const origin = new URL(link).origin
+  const dateLabel = formatDanishDate(event.eventDate)
+  const churchLine = `${event.churchName}, ${event.churchCity}${event.churchStartTime ? ` kl. ${event.churchStartTime}` : ''}`
+  const partyLine = `${event.partyAddressLine1}, ${event.partyPostalCode} ${event.partyCity}`
+
+  const header = `<img src="${origin}/images/email/victor.png" width="180" alt="Victor" style="display:block;margin:20px auto -28px;width:180px;max-width:60%;height:auto;border:0;" />`
+  const button = `<p style="margin:28px 0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:${COLORS.greenDark};color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:999px;font-weight:bold;font-size:15px;">Åbn din invitation</a></p>`
   const paragraphs = escapeHtml(message)
     .split(/\n{2,}/)
     .map((p) => `<p style="margin:0 0 16px;">${p.replace(/\n/g, '<br/>')}</p>`)
@@ -180,11 +192,19 @@ export function buildInvitationEmail(message: string, link: string): {
   // gives the big obvious target.
   const linked = paragraphs.replaceAll(
     escapeHtml(link),
-    `<a href="${escapeHtml(link)}" style="color:#4b6244;">${escapeHtml(link)}</a>`,
+    `<a href="${escapeHtml(link)}" style="color:${COLORS.green};">${escapeHtml(link)}</a>`,
   )
+  const church = `
+    <img src="${origin}/images/email/church.jpg" width="496" alt="${escapeHtml(event.churchName)}" style="display:block;width:100%;max-width:496px;height:auto;border:0;border-radius:12px;margin:8px 0 20px;" />
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      ${summaryRow('Dato', escapeHtml(dateLabel))}
+      ${summaryRow('Kirke', escapeHtml(churchLine))}
+      ${summaryRow('Fest', escapeHtml(partyLine))}
+    </table>`
+
   return {
     subject: 'Du er inviteret til Victors konfirmation',
-    html: wrapHtml(linked + button),
-    text: message,
+    html: wrapHtml(linked + button + church, header),
+    text: `${message}\n\nDato: ${dateLabel}\nKirke: ${churchLine}\nFest: ${partyLine}`,
   }
 }

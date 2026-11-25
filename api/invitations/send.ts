@@ -3,6 +3,7 @@ import type { Invitation } from '@/types'
 import { buildInvitationEmail } from '../_lib/emailTemplate.js'
 import { getBaseUrl, readJsonBody, sendJson } from '../_lib/http.js'
 import { normalizePhone, renderMessage } from '../_lib/invitation.js'
+import { getEventInfo } from '../_lib/eventInfo.js'
 import { sendEmail } from '../_lib/resend.js'
 import { sendSms } from '../_lib/sms.js'
 import { getSupabaseAdmin } from '../_lib/supabaseAdmin.js'
@@ -50,7 +51,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     if (channels.includes('email') && inv.email && (body.resend || !inv.email_sent_at)) {
       try {
-        await sendEmail({ to: inv.email, ...buildInvitationEmail(text, link) })
+        await sendEmail({ to: inv.email, ...buildInvitationEmail(text, link, await getEventInfo()) })
         result.email = 'sent'
         stamps.email_sent_at = new Date().toISOString()
       } catch (e) {
